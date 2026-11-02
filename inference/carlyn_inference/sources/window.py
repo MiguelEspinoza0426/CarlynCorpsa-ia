@@ -78,6 +78,8 @@ def list_windows() -> list[dict]:
         return []
     windows = []
     for hwnd, title in _visible_windows():
+        if title == "Program Manager":   # the desktop itself
+            continue
         _, _, width, height = _client_area(hwnd)
         if width >= 160 and height >= 120:
             windows.append({"title": title, "width": width, "height": height})

@@ -59,6 +59,15 @@
 - `version` es un hash del contenido: cambia con cualquier cambio de configuración, incluidas las eliminaciones.
 - Los parámetros numéricos de las reglas vienen en `thresholds`: `MaxOccupancy`, `MaxDwellSeconds`, `InactivitySeconds` y `ProximityDistance` (fracción del ancho de la imagen).
 - Las credenciales de las cámaras **no** viajan: el nodo las lee de `CAM_DVR1_USER` y `CAM_DVR1_PASS`.
+- `streamUrl` indica la fuente de video. El administrador la elige en el formulario de la cámara:
+
+  | Formato | Fuente | `credentialsRef` |
+  |---|---|---|
+  | `rtsp://…`, `rtsps://…`, `http://…`, `https://…` | Cámara IP o canal del DVR, sin usuario ni clave en la URL | Sí |
+  | `webcam:<n>` | Cámara conectada al equipo de inferencia (`0` = la primera) | No |
+  | `window:<título>[:x,y,ancho,alto]` | Ventana del escritorio del equipo de inferencia, p. ej. la vista en vivo de Hik-Connect o iVMS-4200. Basta con parte del título. La región, en píxeles del área interna de la ventana, recorta una cámara de la cuadrícula; sin región se usa la ventana completa | No |
+
+  Si cambia `streamUrl` o `targetFps`, el nodo reabre la fuente sin reiniciarse.
 - La API llama a `POST {Inference:BaseUrl}/config/reload` al guardar cambios. Aun así, el nodo debe consultar `config` periódicamente (cada ~30 s, con `If-None-Match`).
 
 ### 2.2 `POST /api/ingest/events`
@@ -131,6 +140,8 @@
 | GET | `/health` | Estado del servicio, GPU y versión del modelo |
 | GET | `/cameras/{cameraId}/snapshot.jpg` | Frame actual sin anotaciones (editor de zonas). `404` si la cámara no está activa |
 | GET | `/cameras/{cameraId}/stream.mjpeg` | Stream con detecciones dibujadas (Fase 5/6, vía proxy de la API) |
+| GET | `/sources/windows` | Ventanas visibles del equipo de inferencia que pueden usarse como fuente: `[{ "title", "width", "height" }]` |
+| GET | `/sources/window-preview.jpg?title=…` | Imagen actual de una ventana a tamaño real, para elegir la región. `404` si no está visible. No se almacena |
 | POST | `/config/reload` | Recarga inmediata de la configuración |
 
 Todos exigen `X-Internal-Key`.

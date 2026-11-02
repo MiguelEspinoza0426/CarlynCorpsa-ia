@@ -94,19 +94,43 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 
 ## Ejecución
 
-```bash
-cd inference
-set INGEST_API_KEY=dev-ingest-key-change-me-0123456789
-set INTERNAL_KEY=dev-internal-key
+En PowerShell, desde la carpeta `inference`:
+
+```powershell
+$env:INGEST_API_KEY = "dev-ingest-key-change-me-0123456789"
+$env:INTERNAL_KEY = "dev-internal-key"
 C:\venvs\carlyn\Scripts\python -m carlyn_inference
 ```
 
+En PowerShell `set` no define variables de entorno: hay que usar `$env:NOMBRE = "valor"`. Las variables solo valen para esa ventana.
+
 El servicio descarga su configuración de la API (cámaras activas, zonas y reglas) y la vuelve a consultar cada 30 s. También la recarga al instante cuando la API llama a `/config/reload`.
 
-**Probar sin el DVR** usando un video de la empresa:
+## Fuentes de video
 
-```bash
-set SOURCE_OVERRIDES={"Soldadura - Nave 1": "C:/ruta/video.mp4"}
+La fuente de cada cámara se elige en la plataforma (**Parámetros → Cámaras → Nueva cámara → Fuente de video**), sin tocar este servicio:
+
+| Opción del formulario | `streamUrl` | Qué captura |
+|---|---|---|
+| Cámara IP / DVR | `rtsp://192.168.100.14:554/Streaming/Channels/102` | El canal del DVR. Usuario y clave se leen de `<REF>_USER` / `<REF>_PASS` en este equipo |
+| Ventana (Hik-Connect / iVMS) | `window:Hik-Connect:0,0,960,540` | Una ventana del escritorio de este equipo. El formulario lista las ventanas abiertas y muestra una vista previa para arrastrar la región de una cámara de la cuadrícula |
+| Cámara USB | `webcam:0` | Una cámara conectada a este equipo (0 = la primera) |
+
+Al guardar, el servicio abre la nueva fuente en segundos. Si se cambia la fuente de una cámara, la reabre sin reiniciarse.
+
+**Captura de ventanas en el PC de la empresa.** Se captura lo que se ve en pantalla, así que:
+- Hik-Connect o iVMS-4200 debe estar abierto con la vista en vivo, **sin minimizar ni tapar**. Conviene un monitor (o escritorio) dedicado.
+- La sesión de Windows debe estar **iniciada y desbloqueada**. Desactiva el bloqueo de pantalla y la suspensión, y no cierres la sesión de Escritorio remoto: con la pantalla bloqueada no hay imagen.
+- Este servicio debe ejecutarse en esa misma sesión de usuario, no como servicio de Windows, que no ve el escritorio.
+- No cambies el diseño de la cuadrícula ni el tamaño de la ventana después de marcar las regiones; si cambian, vuelve a marcarlas.
+- La región está en píxeles del área interna de la ventana, así que funciona aunque la ventana se mueva de sitio.
+
+La «Cámara USB» y la «Ventana» siempre son del **equipo donde corre este servicio**, no del navegador del usuario. Así funciona aunque la plataforma se abra desde un dominio en otro equipo.
+
+**Pruebas locales.** `SOURCE_OVERRIDES` reemplaza la fuente sin tocar la plataforma, por ejemplo con un video de la empresa:
+
+```powershell
+$env:SOURCE_OVERRIDES = '{"Soldadura - Nave 1": "C:/ruta/video.mp4"}'
 ```
 
 ## Benchmark del equipo (HU-35)

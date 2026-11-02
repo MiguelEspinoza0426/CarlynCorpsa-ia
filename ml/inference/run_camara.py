@@ -1,10 +1,8 @@
 import os
-import threading
 import time
 from pathlib import Path
 
-# Forzar RTSP sobre TCP (más estable que UDP); debe ir antes de importar cv2
-os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+import sys
 
 import cv2
 from ultralytics import YOLO
@@ -12,69 +10,33 @@ from ultralytics import YOLO
 from camaras import fuente as resolver_fuente
 
 ROOT = Path(__file__).resolve().parents[2]
-MODELO = Path(os.environ.get("MODELO", ROOT / "ml/runs/epp_welding_v1/weights/best.pt"))
+sys.path.insert(0, str(ROOT / "inference"))
+from carlyn_inference.sources.camera import CameraReader  # noqa: E402
+MODELO = Path(os.environ.get("MODELO", ROOT / "ml/runs/epp_v3_completo/weights/best.pt"))
 # Umbral de confianza: más bajo = detecta más (y se equivoca más). El modelo es más preciso
 # que exhaustivo (falla por omisión), así que conviene un umbral bajo.
 CONF = float(os.environ.get("CONF", 0.25))
 
 
-class LectorCamara:
-    """Lee la cámara en un hilo y conserva solo el frame más reciente."""
-
-    def __init__(self, fuente):
-        self.fuente = fuente
-        self.frame = None
-        self.ts = 0.0
-        self.activo = True
-        self.lock = threading.Lock()
-        self.hilo = threading.Thread(target=self._bucle, daemon=True)
-        self.hilo.start()
-
-    def _abrir(self):
-        if isinstance(self.fuente, str):
-            return cv2.VideoCapture(self.fuente, cv2.CAP_FFMPEG)
-        return cv2.VideoCapture(self.fuente, cv2.CAP_DSHOW)   # en Windows abre la webcam más rápido que MSMF
-
-    def _bucle(self):
-        espera = 1
-        while self.activo:
-            cap = self._abrir()
-            if not cap.isOpened():
-                print(f"[cámara] sin conexión, reintento en {espera}s")
-                time.sleep(espera)
-                espera = min(espera * 2, 30)
-                continue
-            print("[cámara] conectada")
-            espera = 1
-            while self.activo:
-                ok, frame = cap.read()
-                if not ok:
-                    print("[cámara] señal perdida, reconectando...")
-                    break
-                with self.lock:
-                    self.frame, self.ts = frame, time.time()
-            cap.release()
+class LectorCamara(CameraReader):
+    """Lector reutilizado por el servicio de inferencia (inference/carlyn_inference/sources/camera.py)."""
 
     def leer(self):
-        with self.lock:
-            return self.frame, self.ts
+        return self.read()
 
     def cerrar(self):
-        self.activo = False
-        self.hilo.join(timeout=3)   # deja que el hilo haga cap.release(); si no, el proceso queda colgado
+        self.close()
 
 
 def crear_lector(valor):
     """'ventana:iVMS-4200[:x,y,w,h]' -> captura de esa ventana; lo demás -> cámara (webcam, nombre o rtsp)."""
     if valor.startswith("ventana:"):
-        from captura_ventana import LectorVentana
+        from carlyn_inference.sources.window import LectorVentana
         return LectorVentana(valor[len("ventana:"):])
     return LectorCamara(resolver_fuente(valor))
 
 
 if __name__ == "__main__":
-    import sys
-
     # Uso: python run_camara.py [0 | soldadura1 | rtsp://... | ventana:iVMS-4200]   (por defecto: webcam 0)
     fuente = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CAMARA_URL", "0")
 

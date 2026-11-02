@@ -20,14 +20,14 @@ python -m venv C:\venvs\carlyn
 C:\venvs\carlyn\Scripts\pip install -r inference/requirements.txt
 ```
 
-```bash
+```powershell
 cd inference
-set INGEST_API_KEY=dev-ingest-key-change-me-0123456789
-set INTERNAL_KEY=dev-internal-key
+$env:INGEST_API_KEY = "dev-ingest-key-change-me-0123456789"
+$env:INTERNAL_KEY = "dev-internal-key"
 C:\venvs\carlyn\Scripts\python -m carlyn_inference
 ```
 
-La API debe estar en `http://localhost:5000` (o en `API_BASE_URL`). Todas las variables están en [inference/README.md](inference/README.md).
+La API debe estar en `http://localhost:5000` (o en `API_BASE_URL`). Todas las variables están en [inference/README.md](inference/README.md). La fuente de video de cada cámara (DVR, ventana de Hik-Connect / iVMS o cámara USB) se elige desde la plataforma; ver «Fuentes de video» en ese README.
 
 ## Pruebas
 

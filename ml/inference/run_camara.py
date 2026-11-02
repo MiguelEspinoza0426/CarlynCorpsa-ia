@@ -12,6 +12,7 @@ from camaras import fuente as resolver_fuente
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "inference"))
 from carlyn_inference.sources.camera import CameraReader  # noqa: E402
+from carlyn_inference.sources.window import WindowReader  # noqa: E402
 MODELO = Path(os.environ.get("MODELO", ROOT / "ml/runs/epp_v3_completo/weights/best.pt"))
 # Umbral de confianza: más bajo = detecta más (y se equivoca más). El modelo es más preciso
 # que exhaustivo (falla por omisión), así que conviene un umbral bajo.
@@ -28,10 +29,19 @@ class LectorCamara(CameraReader):
         self.close()
 
 
+class LectorVentana(WindowReader):
+    """Captura de ventana del servicio de inferencia (sin región = ventana completa)."""
+
+    def leer(self):
+        return self.read()
+
+    def cerrar(self):
+        self.close()
+
+
 def crear_lector(valor):
     """'ventana:iVMS-4200[:x,y,w,h]' -> captura de esa ventana; lo demás -> cámara (webcam, nombre o rtsp)."""
     if valor.startswith("ventana:"):
-        from carlyn_inference.sources.window import LectorVentana
         return LectorVentana(valor[len("ventana:"):])
     return LectorCamara(resolver_fuente(valor))
 

@@ -1,11 +1,13 @@
-"""HTTP endpoints used by the .NET API: health, snapshot, MJPEG stream and configuration reload."""
+"""HTTP endpoints used by the .NET API: health, snapshot, MJPEG stream, source discovery and configuration reload."""
 import asyncio
 import hmac
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
+from .drawing import encode_jpeg
 from .service import InferenceService
+from .sources import window as window_source
 
 BOUNDARY = "frame"
 
@@ -58,6 +60,19 @@ def create_app(service: InferenceService, internal_key: str) -> FastAPI:
 
         return StreamingResponse(frames(), media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
                                  headers={"Cache-Control": "no-store"})
+
+    @app.get("/sources/windows", dependencies=[Depends(require_key)])
+    def windows():
+        """Desktop windows of this PC that can be used as a camera source (e.g. Hik-Connect, iVMS-4200)."""
+        return window_source.list_windows()
+
+    @app.get("/sources/window-preview.jpg", dependencies=[Depends(require_key)])
+    def window_preview(title: str = Query(min_length=1, max_length=200)):
+        """Whole inner area of a window, to choose the region of one camera. Admin only and never stored."""
+        frame = window_source.capture(title)
+        if frame is None:
+            raise HTTPException(status_code=404, detail=f"La ventana '{title}' no está visible en el equipo de inferencia")
+        return Response(encode_jpeg(frame, 85), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     @app.post("/config/reload", status_code=202, dependencies=[Depends(require_key)])
     def reload():

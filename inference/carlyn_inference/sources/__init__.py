@@ -1,31 +1,28 @@
-"""Video sources: cameras (RTSP/webcam/file) and, on Windows, a desktop window (iVMS-4200)."""
+"""Video sources of a camera, chosen from its stream URL (see docs/contrato-integracion.md):
+
+- rtsp://, rtsps://, http://, https:// -> IP camera or DVR channel (credentials from the node environment);
+- webcam:<n>                            -> camera <n> connected to the inference PC (0 = first one);
+- window:<title>[:x,y,w,h]              -> a window of the inference PC desktop, e.g. Hik-Connect or iVMS-4200;
+- anything else (digits or a file path) -> local overrides for tests (SOURCE_OVERRIDES).
+"""
 import os
+import re
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from .camera import CameraReader
 
-
-class _WindowSource:
-    """Adapts the window reader (LectorVentana) to the read()/close() interface."""
-
-    def __init__(self, spec: str):
-        from .window import LectorVentana
-        self._reader = LectorVentana(spec)
-        self.connected, self.error = True, None
-
-    def read(self):
-        return self._reader.leer()
-
-    def close(self):
-        self._reader.cerrar()
+NETWORK_SCHEMES = ("rtsp", "rtsps", "http", "https")
+WEBCAM = re.compile(r"webcam:(\d{1,2})")
+WINDOW_PREFIX = "window:"
 
 
 def with_credentials(url: str, credentials_ref: str | None) -> str:
     """Adds user/password from <REF>_USER / <REF>_PASS environment variables to an RTSP URL.
 
     Credentials never travel through the API: each inference node keeps them in its environment.
+    Local sources (webcam, window) are returned unchanged.
     """
-    if not credentials_ref:
+    if not credentials_ref or urlsplit(url).scheme not in NETWORK_SCHEMES:
         return url
     user = os.environ.get(f"{credentials_ref}_USER", "")
     password = os.environ.get(f"{credentials_ref}_PASS", "")
@@ -37,7 +34,11 @@ def with_credentials(url: str, credentials_ref: str | None) -> str:
 
 
 def open_source(source: str, name: str = ""):
-    """'0' -> webcam, 'window:<title>' -> desktop window, anything else (URL or file) -> CameraReader."""
-    if source.startswith("window:"):
-        return _WindowSource(source[len("window:"):])
-    return CameraReader(int(source) if source.isdigit() else source, name)
+    """Opens the reader for a source: webcam index, desktop window, or URL/file."""
+    if source.startswith(WINDOW_PREFIX):
+        from .window import WindowReader
+        return WindowReader(source[len(WINDOW_PREFIX):])
+    webcam = WEBCAM.fullmatch(source)
+    if webcam or source.isdigit():
+        return CameraReader(int(webcam.group(1) if webcam else source), name)
+    return CameraReader(source, name)

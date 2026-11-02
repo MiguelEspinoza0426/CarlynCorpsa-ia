@@ -31,6 +31,43 @@ Los IDs de track son temporales: **no hay reconocimiento facial ni identidades**
 
 **Privacidad:** los rostros se **pixelan** en evidencias, snapshots y el video en vivo. Se usan los puntos de la cara del modelo de postura y, si no hay, la parte superior de la caja de la persona.
 
+## Motor de reglas (`carlyn_inference/rules/`)
+
+Cada regla es una clase. `RuleEngine` no conoce ninguna regla concreta: solo coordina.
+- Actualiza los tracks y la pertenencia a zonas.
+- Ejecuta las reglas registradas en una tabla indexada por `EventType`.
+- Acumula las métricas (ocupación, permanencia e inactividad).
+
+| Archivo | Contenido |
+|---|---|
+| `models.py` | `EventType`, observaciones (`PersonObs`, `ObjectObs`), `EventOut` y métricas |
+| `state.py` | `EngineState`: tracks, presencias por zona, objetos, *cooldowns* y búferes de métricas, compartido por todas las reglas |
+| `base.py` | Las cuatro interfaces de regla, según su alcance |
+| `epp.py`, `restricted.py`, `dwell.py`, `inactivity.py`, `proximity.py`, `fall.py`, `occupancy.py`, `unsafe.py` | Una regla por archivo |
+| `registry.py` | `default_rules()`: la tabla `EventType → regla` |
+| `engine.py` | `RuleEngine` |
+
+| Interfaz | Se evalúa | Ejemplos |
+|---|---|---|
+| `PersonZoneRule` | por persona y zona (dentro o fuera; `track.zones` lo indica) | EPP, ingreso restringido, permanencia, inactividad, proximidad |
+| `PersonRule` | por persona | posible accidente |
+| `ZoneRule` | por zona, con el número de personas dentro | aforo |
+| `FrameRule` | una vez por frame, con los objetos | condición insegura |
+
+### Cómo agregar una regla
+
+1. Agrega el tipo a `EventType` en `models.py`. Debe coincidir con el `type` de la regla configurada en la API.
+2. Crea `rules/<nombre>.py` con una clase que herede de la interfaz adecuada:
+   - define `event_type`;
+   - implementa `evaluate(...)`;
+   - lee la configuración con `zone.rule(self.event_type)` y `zone.threshold(...)`;
+   - usa `state.cooldown_ok(rule, clave, now)` antes de emitir;
+   - guarda el estado propio en `EngineState` (o en `Presence`/`Track` si es por persona).
+3. Regístrala en `default_rules()` de `registry.py`. El orden de la tabla solo define el orden de los eventos dentro de un frame.
+4. Agrega un test en `tests/test_rule_strategies.py` que evalúe la clase sin el motor.
+
+`RuleEngine`, `worker.py` y las demás reglas no cambian. Para pruebas también se puede pasar una tabla propia: `RuleEngine(camera, {**default_rules(), "MiRegla": MiRegla()})`.
+
 ## Instalación
 
 ```bash

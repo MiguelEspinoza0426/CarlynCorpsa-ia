@@ -1,0 +1,7 @@
+# Cámaras de la empresa, reemitidas por MediaMTX (infra/empresa/mediamtx.yml).
+# Usuario y clave NO van aquí: defínelos en las variables CAMARAS_USER y CAMARAS_PASS.
+servidor: 100.106.202.36   # desktop-uoahvvk (PC de la empresa, Tailscale)
+puerto: 8554
+camaras:                # mismos nombres que en "paths" de mediamtx.yml
+  - soldadura1
+  - soldadura2

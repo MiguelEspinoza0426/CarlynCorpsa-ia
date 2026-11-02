@@ -1,4 +1,4 @@
-# ml/inference/captura_ventana.py
+# inference/carlyn_inference/sources/window.py (moved from ml/inference/captura_ventana.py)
 """Usa una ventana de Windows (p. ej. la vista en vivo de iVMS-4200) como si fuera una cámara.
 
 Fuente: "ventana:<parte del título>" o "ventana:<título>:x,y,w,h"

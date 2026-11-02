@@ -3,8 +3,21 @@
 Track ids are temporary and never identify people.
 """
 from dataclasses import dataclass
+from enum import StrEnum
 
 from ..geometry import Box
+
+
+class EventType(StrEnum):
+    """Event types as configured in the API (Rule.type). Also the key of the rules table."""
+    EPP_MISSING = "EppMissing"
+    RESTRICTED_ZONE_ENTRY = "RestrictedZoneEntry"
+    DANGER_ZONE_DWELL = "DangerZoneDwell"
+    INACTIVITY = "Inactivity"
+    PROXIMITY = "Proximity"
+    POSSIBLE_ACCIDENT = "PossibleAccident"
+    OCCUPANCY_EXCEEDED = "OccupancyExceeded"
+    UNSAFE_CONDITION = "UnsafeCondition"
 
 
 @dataclass(frozen=True)

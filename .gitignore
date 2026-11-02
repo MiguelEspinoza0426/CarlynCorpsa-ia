@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# ML data and artifacts (large / private): datasets, training runs, model weights
+ml/datasets/
+ml/runs/
+ml/models/
+runs/
+weights/
+*.pt
+*.onnx
+*.engine
+
+# Videos and captured frames from the company (private)
+*.mp4
+*.avi
+*.mov
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
+
+# Logs and outbox
+logs/
+data/

@@ -1,0 +1,48 @@
+# Configuración de MediaMTX para la PC de la empresa (emisor).
+# Lee las cámaras IP de la red local y las reemite por RTSP, para que tu PC
+# las consuma a través de Tailscale como rtsp://<ip-tailscale-empresa>:8554/<nombre>.
+# Descarga: https://github.com/bluenviron/mediamtx/releases (mediamtx_vX.Y.Z_windows_amd64.zip)
+# Coloca este archivo junto a mediamtx.exe (reemplaza el que trae el zip).
+
+logLevel: info
+
+# Solo RTSP sobre TCP; los demás protocolos no se usan
+rtsp: yes
+rtspTransports: [tcp]
+rtspAddress: :8554
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+authMethod: internal
+authInternalUsers:
+  # Usuario con el que tu PC lee los videos. CAMBIA la contraseña.
+  - user: carlyn
+    pass: CAMBIAR_ESTA_CLAVE
+    ips: []
+    permissions:
+      - action: read
+  # La propia PC puede hacer todo (pruebas locales)
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions:
+      - action: publish
+      - action: read
+      - action: api
+
+paths:
+  # Las cámaras se leen del grabador EPCOM (DVR/NVR, base Hikvision), no una por una.
+  # Si la URL no funciona, en firmwares antiguos prueba: /h264/ch1/sub/av_stream
+  # URL: rtsp://usuario:clave@IP_DEL_NVR:554/Streaming/Channels/<canal><stream>
+  #   canal = número de cámara en el NVR (1, 2, 3...), stream 1 = principal, 2 = sub-stream
+  #   cámara 1 -> 101 / 102,  cámara 2 -> 201 / 202,  cámara 12 -> 1201 / 1202
+  # Usa el sub-stream (...02): menos resolución y ancho de banda, suficiente para YOLO a 640.
+  # Usuario: crea en el NVR uno solo de "Visualización en vivo", no uses el admin.
+  soldadura1:
+    source: rtsp://usuario:clave@192.168.1.100:554/Streaming/Channels/102
+    sourceOnDemand: yes     # solo se conecta al NVR cuando alguien está mirando
+  soldadura2:
+    source: rtsp://usuario:clave@192.168.1.100:554/Streaming/Channels/202
+    sourceOnDemand: yes

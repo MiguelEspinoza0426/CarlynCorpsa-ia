@@ -7,8 +7,9 @@ import math
 from collections import Counter, deque
 from dataclasses import dataclass, field
 
-from .config import CameraConfig, Rule, Zone
-from .geometry import Box, Point, distance_to_polygon, foot_point, point_in_polygon
+from ..config import CameraConfig, Rule, Zone
+from ..geometry import Point, distance_to_polygon, foot_point, point_in_polygon
+from .models import DwellSession, EventOut, InactivityInterval, ObjectObs, OccupancySample, PersonObs
 
 TRACK_LOST_SEC = 2.0          # a track not seen for this long is closed
 EPP_MAJORITY = 0.7            # an item is missing if absent in ≥ 70 % of the frames of the window
@@ -19,64 +20,6 @@ MIN_DWELL_SEC = 1.0
 MIN_FALL_SEC = 2.0
 DEFAULT_INACTIVITY_SEC = 300
 DEFAULT_PROXIMITY = 0.05
-
-
-@dataclass(frozen=True)
-class PersonObs:
-    track_id: int
-    box: Box
-    confidence: float
-    epp: frozenset[str] = frozenset()
-    fallen: bool = False
-
-
-@dataclass(frozen=True)
-class ObjectObs:
-    track_id: int
-    label: str
-    box: Box
-    confidence: float
-
-
-@dataclass
-class EventOut:
-    type: str
-    zone_id: str | None
-    rule_id: str | None
-    started_at: float
-    ended_at: float | None
-    confidence: float
-    person_count: int
-    track_id: int | None
-    bbox: Box | None
-    details: dict
-
-
-@dataclass(frozen=True)
-class OccupancySample:
-    zone_id: str
-    window_start: float
-    window_sec: int
-    avg_count: float
-    max_count: int
-    min_count: int
-
-
-@dataclass(frozen=True)
-class DwellSession:
-    zone_id: str
-    track_id: int
-    entered_at: float
-    exited_at: float
-    from_zone_id: str | None
-
-
-@dataclass(frozen=True)
-class InactivityInterval:
-    zone_id: str
-    track_id: int
-    started_at: float
-    ended_at: float
 
 
 @dataclass

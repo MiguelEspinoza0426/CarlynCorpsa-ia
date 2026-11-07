@@ -91,6 +91,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `PORT` | Puerto HTTP del servicio | `8100` |
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
+| `REMOTE_LOG_LEVEL` | Nivel mínimo de los logs que se envían a la API para la página **Logs del sistema** (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `OFF` lo desactiva | `INFO` |
 
 ## Ejecución
 

@@ -24,6 +24,7 @@
 | POST | `/api/ingest/metrics/dwell` | `200` `{ accepted, rejected[] }` |
 | POST | `/api/ingest/metrics/inactivity` | `200` `{ accepted, rejected[] }` |
 | POST | `/api/ingest/heartbeat` | `204` |
+| POST | `/api/ingest/logs` | `202`; lote de logs del nodo (ver 2.5) |
 
 ### 2.1 `GET /api/ingest/config`
 ```json
@@ -132,6 +133,15 @@
 - `status` ∈ `Online`, `Reconnecting`, `Offline`.
 - La API usa **su propia hora** como hora del último heartbeat.
 - Sin heartbeat en `Ingest:HeartbeatTimeoutSeconds` (60 s), la cámara pasa a `Offline` y se emite `cameraStatusChanged`.
+
+### 2.5 `POST /api/ingest/logs` (cada ~5 s, si hay registros)
+```json
+{ "logs": [ { "timestamp": "2026-11-07T15:04:05Z", "level": "Error", "logger": "carlyn_inference.worker",
+              "message": "Camera Nave 1 could not start", "exception": "Traceback (most recent call last): ..." } ] }
+```
+- `level`: `Debug`, `Information`, `Warning`, `Error` o `Critical`. Máximo 500 registros por lote.
+- Se guardan en segundo plano con origen `ia:<nodeId>` junto a los logs de la API. Los administradores los ven en **Seguridad → Logs del sistema** (`GET /api/system-logs`) y se borran a los 14 días (`SystemLogs:RetentionDays`).
+- El nodo no reenvía los logs de su cliente HTTP (evita bucles) y, si la API no responde, los conserva (máx. 5000) y reintenta.
 
 ## 3. Endpoints del servicio Python (consumidos por la API)
 

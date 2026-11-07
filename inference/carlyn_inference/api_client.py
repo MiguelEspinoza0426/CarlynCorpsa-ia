@@ -57,6 +57,10 @@ class ApiClient:
         response = self.http.post("/api/ingest/heartbeat", json={"sentAt": iso(time.time()), "modelVersion": model_version, "cameras": cameras})
         response.raise_for_status()
 
+    def post_logs(self, logs: list[dict]) -> None:
+        response = self.http.post("/api/ingest/logs", json={"logs": logs})
+        response.raise_for_status()
+
     def close(self) -> None:
         self.http.close()
 

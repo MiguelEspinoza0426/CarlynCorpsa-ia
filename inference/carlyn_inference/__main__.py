@@ -22,7 +22,9 @@ def main() -> None:
         logging.getLogger().addHandler(remote_logs)
     service.start()
     try:
-        uvicorn.run(create_app(service, settings.internal_key), host=settings.host, port=settings.port, log_level="warning")
+        # log_config=None: uvicorn's own logging setup (dictConfig) would close the handlers above, remote_logs included.
+        uvicorn.run(create_app(service, settings.internal_key), host=settings.host, port=settings.port, log_level="warning",
+                    log_config=None)
     finally:
         service.stop()
         if remote_logs is not None:

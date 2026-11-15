@@ -1,5 +1,6 @@
 """The live video is rendered at its own rate from raw frames plus the latest detections."""
 import time
+from dataclasses import replace
 
 import numpy as np
 
@@ -58,6 +59,18 @@ def test_video_freezes_instead_of_showing_faces_at_outdated_positions(camera_fac
         assert stream.render(noise()) is None                                         # analysis stalled
         stream.overlay = overlay(camera_factory)
         assert stream.render(noise()) is not None
+    finally:
+        stream.close()
+
+
+def test_a_camera_can_turn_off_the_pixelation_of_its_live_video(camera_factory):
+    stream = LiveStream(lambda: (None, 0.0), fps=30, jpeg_quality=95, max_width=320, blur=True)
+    try:
+        blurred = overlay(camera_factory)
+        stream.overlay = blurred
+        with_blur = stream.render(noise())
+        stream.overlay = replace(blurred, camera=replace(blurred.camera, blur_faces=False), at=time.time())
+        assert stream.render(noise()) != with_blur          # same frame and detections, faces left as they are
     finally:
         stream.close()
 

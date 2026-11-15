@@ -68,7 +68,7 @@ class LiveStream:
         if overlay is None or (now or time.time()) - overlay.at > MAX_OVERLAY_AGE_SEC:
             return None
         out = draw(frame, overlay.camera, overlay.persons, overlay.counts, overlay.fps)
-        if self._blur:
+        if self._blur and overlay.camera.blur_faces:
             out = blur_faces(out, overlay.persons, overlay.pose_keypoints, padding=BLUR_PADDING)
         return encode_jpeg(out, self._jpeg_quality, self._max_width)
 

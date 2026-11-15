@@ -91,6 +91,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `PORT` | Puerto HTTP del servicio | `8100` |
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
+| `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros en el video en vivo» de la plataforma; `false` lo desactiva en todas | `true` |
 | `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |
 | `REMOTE_LOG_LEVEL` | Nivel mínimo de los logs que se envían a la API para la página **Logs del sistema** (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `OFF` lo desactiva | `INFO` |
 

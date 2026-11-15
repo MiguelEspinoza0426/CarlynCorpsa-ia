@@ -45,6 +45,8 @@ class CameraConfig:
     credentials_ref: str | None
     target_fps: int
     zones: list[Zone] = field(default_factory=list)
+    # Pixelate faces in the live video (evidence images and snapshots are always pixelated).
+    blur_faces: bool = True
 
     @property
     def source_key(self) -> tuple:
@@ -80,5 +82,5 @@ def parse(data: dict) -> NodeConfig:
         epp_classes=frozenset(data["model"]["eppClasses"]),
         person_class=data["model"]["personClass"],
         cameras=[CameraConfig(c["id"], c["name"], c["streamUrl"], c.get("credentialsRef"), c["targetFps"],
-                              [zone(z) for z in c.get("zones", [])]) for c in data["cameras"]],
+                              [zone(z) for z in c.get("zones", [])], c.get("blurFaces", True)) for c in data["cameras"]],
     )

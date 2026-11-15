@@ -28,6 +28,7 @@ class Settings:
     heartbeat_sec: int = 15
     metrics_flush_sec: int = 10
     stream_max_width: int = 960
+    stream_fps: int = 30
     jpeg_quality: int = 75
     blur_stream: bool = True
     source_overrides: dict[str, str] = field(default_factory=dict)
@@ -67,6 +68,7 @@ class Settings:
             heartbeat_sec=int(env("HEARTBEAT_SEC", defaults.heartbeat_sec)),
             metrics_flush_sec=int(env("METRICS_FLUSH_SEC", defaults.metrics_flush_sec)),
             stream_max_width=int(env("STREAM_MAX_WIDTH", defaults.stream_max_width)),
+            stream_fps=int(env("STREAM_FPS", defaults.stream_fps)),
             jpeg_quality=int(env("JPEG_QUALITY", defaults.jpeg_quality)),
             blur_stream=_bool("BLUR_STREAM", defaults.blur_stream),
             # JSON map camera id or name -> source ("0", video file, rtsp://...), for tests without the DVR.

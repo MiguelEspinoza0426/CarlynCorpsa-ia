@@ -121,8 +121,11 @@ class Detector:
 PIXELATION_BLOCKS = 6       # a face region is reduced to about 6x6 blocks: not recognizable
 
 
-def blur_faces(frame: np.ndarray, persons: list[PersonObs], keypoints: list[tuple[Box, np.ndarray]]) -> np.ndarray:
-    """Pixelates faces: around the face keypoints when available, otherwise the top of each person box."""
+def blur_faces(frame: np.ndarray, persons: list[PersonObs], keypoints: list[tuple[Box, np.ndarray]], padding: float = 0.0) -> np.ndarray:
+    """Pixelates faces: around the face keypoints when available, otherwise the top of each person box.
+
+    `padding` enlarges every region by that fraction of its size on each side, for frames newer than the detections.
+    """
     out = frame.copy()
     h, w = out.shape[:2]
     regions = []
@@ -140,7 +143,8 @@ def blur_faces(frame: np.ndarray, persons: list[PersonObs], keypoints: list[tupl
         if not any(_overlaps(head, r) for r in covered):
             regions.append(head)
     for x1, y1, x2, y2 in regions:
-        x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
+        px, py = int((x2 - x1) * padding), int((y2 - y1) * padding)
+        x1, y1, x2, y2 = max(0, x1 - px), max(0, y1 - py), min(w, x2 + px), min(h, y2 + py)
         if x2 - x1 > 2 and y2 - y1 > 2:
             roi = out[y1:y2, x1:x2]
             small = cv2.resize(roi, (PIXELATION_BLOCKS, PIXELATION_BLOCKS), interpolation=cv2.INTER_AREA)

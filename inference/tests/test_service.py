@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from carlyn_inference import config as config_module
 from carlyn_inference.api_client import ApiClient, Outbox, event_payload
 from carlyn_inference.detection import associate_epp, blur_faces, torso_angle
+from carlyn_inference.live_stream import LiveStream
 from carlyn_inference.rules import EventOut, OccupancySample, PersonObs
 from carlyn_inference.server import create_app
 from carlyn_inference.service import InferenceService

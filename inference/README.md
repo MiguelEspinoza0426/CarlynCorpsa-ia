@@ -29,7 +29,7 @@ API .NET ──► /cameras/{id}/snapshot.jpg, /cameras/{id}/stream.mjpeg, /conf
 
 Los IDs de track son temporales: **no hay reconocimiento facial ni identidades**.
 
-**Privacidad:** los rostros se **pixelan** en evidencias, snapshots y el video en vivo. Se usan los puntos de la cara del modelo de postura y, si no hay, la parte superior de la caja de la persona.
+**Privacidad:** los rostros se **pixelan** en evidencias, snapshots y el video en vivo. En el video en vivo, que muestra fotogramas más recientes que el último análisis, la zona pixelada se amplía, y si el análisis se detiene más de 1 s el video se congela en lugar de mostrar rostros sin pixelar. Se usan los puntos de la cara del modelo de postura y, si no hay, la parte superior de la caja de la persona.
 
 ## Motor de reglas (`carlyn_inference/rules/`)
 
@@ -91,6 +91,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `PORT` | Puerto HTTP del servicio | `8100` |
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
+| `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |
 | `REMOTE_LOG_LEVEL` | Nivel mínimo de los logs que se envían a la API para la página **Logs del sistema** (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `OFF` lo desactiva | `INFO` |
 
 ## Ejecución

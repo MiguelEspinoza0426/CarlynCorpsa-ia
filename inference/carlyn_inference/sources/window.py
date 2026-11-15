@@ -18,7 +18,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-CAPTURE_FPS = 15
+CAPTURE_FPS = 30
 SUPPORTED = sys.platform == "win32"
 
 if SUPPORTED:

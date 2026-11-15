@@ -1,4 +1,4 @@
-"""One thread per camera: capture → detection/tracking → rules → events, metrics and stream frames."""
+"""One thread per camera: capture → detection/tracking → rules → events and metrics. The live video is rendered by LiveStream."""
 import logging
 import threading
 import time
@@ -6,7 +6,8 @@ import time
 from .api_client import Outbox, event_payload, iso
 from .config import CameraConfig, NodeConfig
 from .detection import Detector, blur_faces
-from .drawing import draw, draw_event, encode_jpeg
+from .drawing import draw_event, encode_jpeg
+from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
 from .settings import Settings
 from .sources import open_source, with_credentials
@@ -30,7 +31,8 @@ class CameraWorker(threading.Thread):
         self.latency_ms: int | None = None
         self.last_frame_at: float | None = None
         self.error: str | None = None
-        self.latest_jpeg: bytes | None = None
+        self.stream = LiveStream(self._read_frame, settings.stream_fps, settings.jpeg_quality, settings.stream_max_width,
+                                 settings.blur_stream, camera.name)
         self.latest_frame = None
         self.latest_persons = []
         self.frame_ready = threading.Condition()
@@ -58,6 +60,7 @@ class CameraWorker(threading.Thread):
 
     def stop(self) -> None:
         self._running = False
+        self.stream.close()
         if self.reader is not None:
             self.reader.close()
 
@@ -111,18 +114,19 @@ class CameraWorker(threading.Thread):
                                       encode_jpeg(snapshot, 85, max_width=1280))
                 log.info("[%s] %s in zone %s (track %s)", camera.name, event.type, event.zone_id, event.track_id)
 
-        annotated = draw(frame, camera, detections.persons, engine.zone_counts(), self.fps)
-        if self.settings.blur_stream:
-            annotated = blur_faces(annotated, detections.persons, detections.pose_keypoints)
-        jpeg = encode_jpeg(annotated, self.settings.jpeg_quality, self.settings.stream_max_width)
+        # The live video draws these detections over the raw frames that follow, at its own rate.
+        self.stream.overlay = Overlay(camera, detections.persons, detections.pose_keypoints, engine.zone_counts(), self.fps)
 
         elapsed = time.time() - (self.last_frame_at or now)
         self.fps = 0.8 * self.fps + 0.2 * (1 / elapsed) if self.last_frame_at and elapsed > 0 else self.fps
         self.latency_ms = int((time.time() - ts) * 1000)
         self.last_frame_at = now
         with self.frame_ready:
-            self.latest_jpeg, self.latest_frame, self.latest_persons = jpeg, frame, detections.persons
+            self.latest_frame, self.latest_persons = frame, detections.persons
             self.frame_ready.notify_all()
+
+    def _read_frame(self):
+        return self.reader.read() if self.reader is not None else (None, 0.0)
 
     def snapshot_jpeg(self) -> bytes | None:
         """Current frame without annotations (zone editor), with faces blurred."""

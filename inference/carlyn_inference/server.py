@@ -50,13 +50,16 @@ def create_app(service: InferenceService, internal_key: str) -> FastAPI:
 
         async def frames():
             last = None
-            while True:
-                jpeg = worker.latest_jpeg
-                if jpeg is not None and jpeg is not last:
-                    last = jpeg
-                    yield b"--" + BOUNDARY.encode() + b"\r\nContent-Type: image/jpeg\r\nContent-Length: " + \
-                        str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n"
-                await asyncio.sleep(1 / max(1, worker.camera.target_fps))
+            # Frames are rendered only while somebody watches, at the stream rate (not the analysis rate).
+            with worker.stream.watching():
+                while True:
+                    jpeg = worker.stream.latest_jpeg
+                    if jpeg is not None and jpeg is not last:
+                        last = jpeg
+                        yield b"--" + BOUNDARY.encode() + b"\r\nContent-Type: image/jpeg\r\nContent-Length: " + \
+                            str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n"
+                    # Polling twice per frame keeps the delivery close to the render rate.
+                    await asyncio.sleep(1 / (2 * worker.stream.fps))
 
         return StreamingResponse(frames(), media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
                                  headers={"Cache-Control": "no-store"})

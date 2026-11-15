@@ -45,8 +45,9 @@ def test_frames_are_rendered_at_the_stream_rate_only_while_watched(camera_factor
             while time.time() < deadline:
                 stream.overlay = overlay(camera_factory)             # analysis keeps running (5 fps in production)
                 time.sleep(0.2)
-        assert stream.latest_jpeg[:2] == b"\xff\xd8"
+            assert stream.latest_jpeg[:2] == b"\xff\xd8"
         assert 20 <= stream.rendered <= 34                           # ~30 fps, far above the analysis rate
+        assert stream.latest_jpeg is None                            # the next viewer does not start with an old frame
     finally:
         stream.close()
 

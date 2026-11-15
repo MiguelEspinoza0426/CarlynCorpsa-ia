@@ -61,6 +61,9 @@ class LiveStream:
         finally:
             with self._lock:
                 self._viewers -= 1
+                if self._viewers <= 0:
+                    # Rendering stops now: the next viewer must not start with this (by then old) frame.
+                    self.latest_jpeg = None
 
     def render(self, frame: np.ndarray, now: float | None = None) -> bytes | None:
         """JPEG of a raw frame with the latest detections, or None while there is no recent analysis."""

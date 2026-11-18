@@ -26,6 +26,8 @@ class Settings:
     epp_crop_margin: float = 0.15
     # Persons shorter than this (source pixels) are counted and tracked, but their EPP is not judged.
     min_person_height_px: int = 150
+    # Seconds a person who stops being detected (column, truck, backlight) keeps its track id.
+    track_buffer_sec: float = 4.0
     pose_model: str = "yolo11n-pose.pt"
     object_model: str = ""
     device: str = "auto"
@@ -74,6 +76,7 @@ class Settings:
             epp_imgsz=int(env("EPP_IMGSZ", defaults.epp_imgsz)),
             epp_crop_margin=float(env("EPP_CROP_MARGIN", defaults.epp_crop_margin)),
             min_person_height_px=int(env("MIN_PERSON_HEIGHT_PX", defaults.min_person_height_px)),
+            track_buffer_sec=float(env("TRACK_BUFFER_SEC", defaults.track_buffer_sec)),
             pose_model=env("POSE_MODEL", defaults.pose_model),
             object_model=env("OBJECT_MODEL", defaults.object_model),
             device=env("DEVICE", defaults.device),

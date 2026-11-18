@@ -22,6 +22,16 @@ def feed(engine, observations, seconds, start=0.0, step=0.2):
 
 # ---- geometry ----
 
+def test_a_person_hidden_briefly_keeps_one_dwell_session(camera_factory):
+    def seen(lost_sec):
+        engine = RuleEngine(camera_factory(zone("weld", "Work")), track_lost_sec=lost_sec)
+        # Visible 0-4 s, hidden behind a column 4-7.4 s, visible again until 9 s, then gone for good.
+        feed(engine, lambda t: [person()] if t < 4 or 7.4 <= t < 9 else [], seconds=15)
+        return len(engine.take_metrics()[1])
+    assert seen(4.0) == 1                     # one dwell session
+    assert seen(2.0) == 2                     # the old 2 s patience split it in two
+
+
 def test_point_in_polygon_and_distance():
     assert point_in_polygon((0.25, 0.5), LEFT)
     assert not point_in_polygon((0.75, 0.5), LEFT)

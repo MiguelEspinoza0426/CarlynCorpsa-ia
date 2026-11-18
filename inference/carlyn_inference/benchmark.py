@@ -204,7 +204,9 @@ def offline(args, settings: Settings) -> dict:
     inference = InferenceConfig.parse({"slice": json.loads(args.slice) if args.slice else None,
                                        "preprocess": json.loads(args.preprocess) if args.preprocess else None})
     slicing = inference.slicing
-    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, inference=inference)
+    fps = cv2.VideoCapture(args.source).get(cv2.CAP_PROP_FPS) if Path(args.source).is_file() else None
+    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, inference=inference,
+                               fps=(fps or 0) / args.stride or None)
     for frame in frames[:5]:            # warm-up: CUDA kernels and cuDNN autotuning
         detector.detect(frame, False)
     timings.__init__()

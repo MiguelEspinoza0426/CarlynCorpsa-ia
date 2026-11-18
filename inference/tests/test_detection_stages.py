@@ -39,10 +39,22 @@ class _PersonModel:
     def __init__(self, rows, ids):
         self.rows, self.ids, self.calls = rows, ids, []
 
-    def track(self, frame, **kwargs):
+    def predict(self, crops, **kwargs):
         self.calls.append(kwargs)
-        h, w = frame.shape[:2]
-        return [_Result(self.names, _Boxes(self.rows, (w, h), self.ids))]
+        h, w = crops[0].shape[:2]
+        return [_Result(self.names, _Boxes(self.rows, (w, h)))]
+
+
+class _IdTracker:
+    """Gives each detection the next of the given ids; None = not confirmed yet (dropped)."""
+
+    def __init__(self, ids):
+        self.ids = ids
+
+    def update(self, boxes, img):
+        rows = [[*xyxy, track_id, conf, 0, i] for i, (xyxy, conf, track_id) in
+                enumerate(zip(boxes.xyxy.tolist(), boxes.conf.tolist(), self.ids)) if track_id is not None]
+        return np.array(rows).reshape(-1, 8)
 
 
 class _EppModel:
@@ -62,7 +74,7 @@ EPP = frozenset({"casco", "mandil"})
 
 def _two_stage(person_rows, ids, epp_rows):
     persons, epp = _PersonModel(person_rows, ids), _EppModel(epp_rows)
-    tracked = TrackedPersons(persons, frozenset({"persona", "person"}), "cpu", 640, 0.3)
+    tracked = TrackedPersons(persons, frozenset({"persona", "person"}), "cpu", 640, 0.3, _IdTracker(ids))
     return TwoStage(tracked, epp, EPP, "cpu", 320, 0.25, 0.15), persons, epp
 
 
@@ -99,11 +111,11 @@ def test_two_stage_ignores_epp_of_a_neighbour_seen_in_the_margin():
 
 
 def test_two_stage_skips_untracked_and_tiny_persons():
-    stage, _, epp = _two_stage([(0, 0.8, 1000, 500, 1100, 800), (0, 0.5, 10, 10, 15, 20)], [None, 3], [[]])
+    # The 5x10 px box is dropped before tracking (min_box_px); the large one is not confirmed by the tracker yet.
+    stage, _, epp = _two_stage([(0, 0.8, 1000, 500, 1100, 800), (0, 0.5, 10, 10, 15, 20)], [None], [[]])
     raw, assigned, _ = stage.run(FRAME)
-    assert [t for t, _, _ in raw] == [3]
-    assert assigned == {3: set()}
-    assert epp.crops == []                             # 5x10 px: no crop worth analyzing
+    assert raw == [] and assigned == {}
+    assert epp.crops == []
 
 
 class _SingleModel:
@@ -179,3 +191,9 @@ def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
     assert len(persons) == 2
     distant = min(persons, key=lambda p: p[1][3])
     assert distant[1] == pytest.approx((100 / 2000, 50 / 1000, 40 / 2000, 120 / 1000))
+
+
+def test_tracker_buffer_is_set_in_frames_from_seconds():
+    from carlyn_inference.detection import byte_tracker
+    assert byte_tracker(32).max_frames_lost == 32       # 4 s at 8 FPS
+    assert byte_tracker().max_frames_lost == 30         # Ultralytics' default

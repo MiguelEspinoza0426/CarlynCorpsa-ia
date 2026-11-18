@@ -22,7 +22,7 @@ class CameraWorker(threading.Thread):
     def __init__(self, camera: CameraConfig, node: NodeConfig, settings: Settings, outbox: Outbox):
         super().__init__(daemon=True, name=f"camera-{camera.name}")
         self.camera, self.node, self.settings, self.outbox = camera, node, settings, outbox
-        self.engine = RuleEngine(camera)
+        self.engine = RuleEngine(camera, track_lost_sec=settings.track_buffer_sec)
         self._engine_lock = threading.Lock()
         self._running = True
         self.reader = None
@@ -62,7 +62,7 @@ class CameraWorker(threading.Thread):
         """New zones or rules: the rules engine restarts (temporary track state is discarded)."""
         with self._engine_lock:
             self.camera = camera
-            self.engine = RuleEngine(camera)
+            self.engine = RuleEngine(camera, track_lost_sec=self.settings.track_buffer_sec)
         if node is not None:
             self.node = node
             if self.detector is not None:
@@ -77,7 +77,7 @@ class CameraWorker(threading.Thread):
     def run(self) -> None:
         try:
             self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
-                                            inference=self.inference)
+                                            inference=self.inference, fps=self.camera.target_fps)
             self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
             self.reader = open_source(self.source, self.camera.name)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat

@@ -88,33 +88,20 @@ class SingleStage:
         return persons, associate_epp(persons, epp_boxes), epp_boxes
 
 
-class TrackedPersons:
-    """First stage on the whole frame, reduced to imgsz, with Ultralytics' tracking."""
-
-    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float):
-        self.model, self.device, self.imgsz, self.conf = model, device, imgsz, conf
-        # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
-        self.classes = [i for i, name in model.names.items() if name in person_classes]
-
-    def track(self, frame: np.ndarray) -> list[RawPerson]:
-        result = self.model.track(frame, persist=True, conf=self.conf, imgsz=self.imgsz, classes=self.classes,
-                                  device=self.device, tracker="bytetrack.yaml", verbose=False)[0]
-        return [(track_id, box, conf) for _, box, conf, track_id in _boxes(result) if track_id is not None]
-
-
 class SlicedPersons:
-    """First stage with SAHI: the whole frame plus tiles of the camera's ROI in one batch, merged, then ByteTrack.
+    """First stage: persons in the whole frame plus, with SAHI, tiles of the camera's ROI, in one batch; then ByteTrack.
 
     Distant workers (~20x60 px in Camara 1) disappear when the whole frame is reduced to 640 px; inside a tile they
-    keep their pixels.
+    keep their pixels. Detection and tracking are separate so the tracker's buffer can be set in seconds.
     """
 
     def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, config: SliceConfig, tracker=None):
         # Every region is inferred at imgsz: tiles smaller than imgsz are enlarged (320 px tiles at 640 = 2x zoom).
         self.model, self.device, self.imgsz, self.conf, self.config = model, device, imgsz, conf, config
+        # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
         self.classes = [i for i, name in model.names.items() if name in person_classes]
         self.half = device != "cpu"
-        self.tracker = tracker or _byte_tracker()
+        self.tracker = tracker or byte_tracker()
 
     def track(self, frame: np.ndarray) -> list[RawPerson]:
         from ultralytics.engine.results import Boxes
@@ -135,12 +122,22 @@ class SlicedPersons:
         return [(int(t[4]), (t[0] / w, t[1] / h, (t[2] - t[0]) / w, (t[3] - t[1]) / h), float(t[5])) for t in tracks]
 
 
-def _byte_tracker():
-    """Same ByteTrack (and settings) as Ultralytics' track(), fed with the merged detections."""
+class TrackedPersons(SlicedPersons):
+    """First stage without SAHI: only the whole frame, reduced to imgsz."""
+
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, tracker=None):
+        super().__init__(model, person_classes, device, imgsz, conf, SliceConfig(), tracker)
+
+
+def byte_tracker(buffer_frames: int | None = None):
+    """Ultralytics' ByteTrack with its default settings; `buffer_frames` = frames a lost person is remembered."""
     from ultralytics.trackers.byte_tracker import BYTETracker
     from ultralytics.utils import IterableSimpleNamespace, YAML
     from ultralytics.utils.checks import check_yaml
-    return BYTETracker(IterableSimpleNamespace(**YAML.load(check_yaml("bytetrack.yaml"))))
+    args = YAML.load(check_yaml("bytetrack.yaml"))
+    if buffer_frames:
+        args["track_buffer"] = buffer_frames
+    return BYTETracker(IterableSimpleNamespace(**args))
 
 
 class TwoStage:
@@ -251,7 +248,8 @@ DETECTION_MODES = ("two_stage", "single")
 COCO_PERSON = "person"
 
 
-def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool, inference=None) -> Detector:
+def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool, inference=None,
+                    fps: float | None = None) -> Detector:
     """Loads the models of one camera according to the node settings (DETECTION_MODE) and its `inference` block."""
     from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
 
@@ -262,10 +260,12 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
         stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
     else:
         person_model, classes = YOLO(settings.person_model), frozenset({person_class, COCO_PERSON})
+        # A person hidden behind a column for a few seconds keeps the same track id (and the same dwell session).
+        tracker = byte_tracker(round(settings.track_buffer_sec * fps) if fps else None)
         if slicing and slicing.enabled:
-            persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing)
+            persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing, tracker)
         else:
-            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
+            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, tracker)
         stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin,
                          settings.min_person_height_px)
     pose = YOLO(settings.pose_model) if settings.pose_model else None

@@ -16,8 +16,11 @@ MIN_DWELL_SEC = 1.0
 
 
 class RuleEngine:
-    def __init__(self, camera: CameraConfig, rules: Mapping[EventType, RuleStrategy] | None = None):
+    def __init__(self, camera: CameraConfig, rules: Mapping[EventType, RuleStrategy] | None = None,
+                 track_lost_sec: float = TRACK_LOST_SEC):
         self.camera = camera
+        # Same patience as the tracker: closing earlier would split one person's dwell in two.
+        self.track_lost_sec = track_lost_sec
         self._state = EngineState(camera)
         table = list((rules if rules is not None else default_rules()).values())
         self._person_zone_rules = [r for r in table if isinstance(r, PersonZoneRule)]
@@ -56,7 +59,7 @@ class RuleEngine:
         # 3. Tracks that disappeared.
         seen = {p.track_id for p in persons}
         for track_id, track in list(state.tracks.items()):
-            if track_id not in seen and now - track.last_seen > TRACK_LOST_SEC:
+            if track_id not in seen and now - track.last_seen > self.track_lost_sec:
                 for zone_id in list(track.zones):
                     self._exit(track_id, track, zone_id, track.last_seen)
                 del state.tracks[track_id]

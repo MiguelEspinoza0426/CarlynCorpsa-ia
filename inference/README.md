@@ -138,13 +138,14 @@ $env:SOURCE_OVERRIDES = '{"Soldadura - Nave 1": "C:/ruta/video.mp4"}'
 
 ## Benchmark del equipo (HU-35)
 
-```bash
-C:\venvs\carlyn\Scripts\python -m carlyn_inference.benchmark --source C:/ruta/video.mp4 --imgsz 640 --target-fps 5
-```
+Mide el mismo pipeline del servicio (detección + tracking, pose, pixelado y codificación) y guarda el resultado en `docs/benchmarks/` (JSON + resumen). Ver [docs/benchmarks/README.md](../docs/benchmarks/README.md).
 
-Indica el tiempo por frame y cuántas cámaras soporta el equipo a esos FPS. Medido en la RTX 5070 de desarrollo con YOLO11m a 640 px:
-- **~33 ms por frame** con tracking (22 ms de GPU + tracking en CPU);
-- unas **4 cámaras a 5 FPS**.
+```bash
+# Video o carpeta de imágenes
+C:envs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base offline --source C:/ruta/video.mp4 --resize 1280x720
+# Cámaras reales del nodo (detenga antes el servicio; no envía nada a la API)
+C:envs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base live --seconds 120
+```
 
 En la GTX 1650 de la empresa conviene un modelo YOLO11s (`ml/training/train.py --modelo yolo11s.pt`) y 3–5 FPS por cámara.
 

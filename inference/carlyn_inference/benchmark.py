@@ -26,6 +26,7 @@ import cv2
 import numpy as np
 
 from .settings import REPO, Settings
+from .slicing import SliceConfig
 
 OUT_DIR = REPO / "docs" / "benchmarks"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
@@ -81,6 +82,10 @@ def markdown(report: dict) -> str:
         lines.append(f"| {name} | {cam.get('resolution') or '—'} | {cam.get('target_fps') or '—'} | {cam.get('achieved_fps') or '—'} | "
                      f"{det.get('mean', '—')} / {det.get('p95', '—')} | {pose.get('mean', '—')} | {cam.get('persons_per_frame', '—')} | {sizes} | "
                      f"{cam.get('persons_with_epp', '—')} | {epp} |")
+    sliced = {name: cam["slicing"] for name, cam in report["cameras"].items() if cam.get("slicing")}
+    if sliced:
+        lines += ["", "SAHI: " + "; ".join(f"{name}: mosaicos de {s['tile_size']} px, solape {s['overlap']:.0%}, ROI {s['roi']}"
+                                            for name, s in sliced.items())]
     total = report.get("totals", {})
     if total:
         lines += ["", "## Totales", ""]
@@ -191,7 +196,8 @@ def offline(args, settings: Settings) -> dict:
     timings = _Timings()
     timings.install()
     frames = read_frames(args.source, args.frames, args.resize)
-    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False)
+    slicing = SliceConfig.parse(json.loads(args.slice)) if args.slice else None
+    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, slicing=slicing)
     for frame in frames[:5]:            # warm-up: CUDA kernels and cuDNN autotuning
         detector.detect(frame, False)
     timings.__init__()
@@ -209,6 +215,8 @@ def offline(args, settings: Settings) -> dict:
     camera["encode_ms"] = stats(encode_ms)
     camera["achieved_fps"] = round(len(frames) / elapsed, 1)
     detect_mean = camera["detect_ms"]["mean"]
+    if slicing and slicing.enabled:
+        camera["slicing"] = {"tile_size": slicing.tile_size, "overlap": slicing.overlap, "roi": list(slicing.roi)}
     return {"source": f"{args.source} ({len(frames)} cuadros)", "cameras": {Path(args.source).name: camera},
             "totals": {"Capacidad de detección (sin pose ni video)": f"{1000 / detect_mean:.1f} cuadros/s en total",
                        "Cuadros/s con detección + pose + codificación": camera["achieved_fps"]}}
@@ -260,6 +268,8 @@ def live(args, settings: Settings) -> dict:
     for w in workers:
         camera = timings.camera(w.name)
         camera["target_fps"] = w.camera.target_fps
+        if w.slicing.enabled:
+            camera["slicing"] = {"tile_size": w.slicing.tile_size, "overlap": w.slicing.overlap, "roi": list(w.slicing.roi)}
         camera["achieved_fps"] = round(camera["frames"] / elapsed, 1)
         camera["status"], camera["latency_ms"], camera["error"] = statuses[w.name]
         busy_ms += sum(timings.detect.get(w.name, [])) + sum(timings.pose.get(w.name, []))
@@ -284,6 +294,7 @@ def main() -> None:
     off.add_argument("--source", required=True)
     off.add_argument("--frames", type=int, default=300)
     off.add_argument("--resize", type=lambda s: tuple(int(v) for v in s.lower().split("x")), help="p. ej. 1280x720")
+    off.add_argument("--slice", help='SAHI como en la cámara, p. ej. {"enabled": true, "roi": [0, 0, 1, 0.3]}')
     off.add_argument("--epp-classes", nargs="*", default=["careta_soldar", "guantes", "calzado", "mandil", "traje", "protector_facial", "lentes"])
     on = sub.add_parser("live", help="cámaras reales del nodo (detenga antes el servicio)")
     on.add_argument("--seconds", type=int, default=120)

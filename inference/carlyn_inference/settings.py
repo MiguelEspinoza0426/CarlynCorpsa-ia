@@ -32,6 +32,8 @@ class Settings:
     no_signal_sec: float = 5.0
     # Video decoding of RTSP/file sources: auto (GPU decoder if available, else CPU), off, d3d11, vaapi, mfx.
     decode_hw: str = "auto"
+    # Images per GPU call (SAHI tiles, persons' crops); must not exceed the batch of exported TensorRT engines.
+    max_batch: int = 8
     # Heartbeat status for a camera without signal. "Offline" until the API knows "NoSignal" (step 6).
     no_signal_status: str = "Offline"
     pose_model: str = "yolo11n-pose.pt"
@@ -85,6 +87,7 @@ class Settings:
             track_buffer_sec=float(env("TRACK_BUFFER_SEC", defaults.track_buffer_sec)),
             no_signal_sec=float(env("NO_SIGNAL_SEC", defaults.no_signal_sec)),
             decode_hw=env("DECODE_HW", defaults.decode_hw).strip().lower(),
+            max_batch=int(env("MAX_BATCH", defaults.max_batch)),
             no_signal_status=env("NO_SIGNAL_STATUS", defaults.no_signal_status),
             pose_model=env("POSE_MODEL", defaults.pose_model),
             object_model=env("OBJECT_MODEL", defaults.object_model),

@@ -54,6 +54,14 @@ def epp_passes(label: str, conf: float, minimums: dict[str, float]) -> bool:
     return conf >= minimums.get(label, 0.0)
 
 
+def predict_batched(model, images: list[np.ndarray], max_batch: int, **kwargs) -> list:
+    """One GPU call per `max_batch` images: TensorRT engines accept up to the batch they were exported with."""
+    results = []
+    for i in range(0, len(images), max_batch):
+        results += model.predict(images[i:i + max_batch], **kwargs)
+    return results
+
+
 RawPerson = tuple[int, Box, float]          # track id, normalized box, confidence
 EppBox = tuple[str, Box, float]             # label, normalized box, confidence
 
@@ -95,9 +103,11 @@ class SlicedPersons:
     keep their pixels. Detection and tracking are separate so the tracker's buffer can be set in seconds.
     """
 
-    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, config: SliceConfig, tracker=None):
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, config: SliceConfig, tracker=None,
+                 max_batch: int = 8):
         # Every region is inferred at imgsz: tiles smaller than imgsz are enlarged (320 px tiles at 640 = 2x zoom).
         self.model, self.device, self.imgsz, self.conf, self.config = model, device, imgsz, conf, config
+        self.max_batch = max_batch
         # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
         self.classes = [i for i, name in model.names.items() if name in person_classes]
         self.half = device != "cpu"
@@ -108,8 +118,9 @@ class SlicedPersons:
 
         h, w = frame.shape[:2]
         regions = tile_regions(w, h, self.config)
-        results = self.model.predict([frame[y1:y2, x1:x2] for x1, y1, x2, y2 in regions], imgsz=self.imgsz,
-                                     conf=self.conf, classes=self.classes, device=self.device, half=self.half, verbose=False)
+        results = predict_batched(self.model, [frame[y1:y2, x1:x2] for x1, y1, x2, y2 in regions], self.max_batch,
+                                  imgsz=self.imgsz, conf=self.conf, classes=self.classes, device=self.device, half=self.half,
+                                  verbose=False)
         found = []
         for r, region in zip(results, regions):
             if r.boxes is not None and len(r.boxes):
@@ -125,8 +136,8 @@ class SlicedPersons:
 class TrackedPersons(SlicedPersons):
     """First stage without SAHI: only the whole frame, reduced to imgsz."""
 
-    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, tracker=None):
-        super().__init__(model, person_classes, device, imgsz, conf, SliceConfig(), tracker)
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, tracker=None, max_batch: int = 8):
+        super().__init__(model, person_classes, device, imgsz, conf, SliceConfig(), tracker, max_batch)
 
 
 def byte_tracker(buffer_frames: int | None = None):
@@ -147,11 +158,12 @@ class TwoStage:
     """
 
     def __init__(self, persons: TrackedPersons | SlicedPersons, epp_model, epp_classes: frozenset[str], device,
-                 epp_imgsz: int, epp_conf: float, margin: float, min_height_px: int = 0):
+                 epp_imgsz: int, epp_conf: float, margin: float, min_height_px: int = 0, max_batch: int = 8):
         self.persons, self.epp_model = persons, epp_model
         self.epp_classes, self.device = epp_classes, device
         self.epp_imgsz, self.epp_conf, self.margin = epp_imgsz, epp_conf, margin
         self.min_height_px = min_height_px
+        self.max_batch = max_batch
         self.epp_min_confidence: dict[str, float] = {}
 
     def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
@@ -164,8 +176,8 @@ class TwoStage:
         if not crops:
             return persons, epp, []
         # A single batch for all the persons of the frame.
-        results = self.epp_model.predict([frame[y1:y2, x1:x2] for _, _, (x1, y1, x2, y2) in crops], conf=self.epp_conf,
-                                         imgsz=self.epp_imgsz, device=self.device, verbose=False)
+        results = predict_batched(self.epp_model, [frame[y1:y2, x1:x2] for _, _, (x1, y1, x2, y2) in crops], self.max_batch,
+                                  conf=self.epp_conf, imgsz=self.epp_imgsz, device=self.device, verbose=False)
         epp_boxes = []
         for (track_id, person_box, region), crop_result in zip(crops, results):
             if crop_result.boxes is None:
@@ -263,11 +275,12 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
         # A person hidden behind a column for a few seconds keeps the same track id (and the same dwell session).
         tracker = byte_tracker(round(settings.track_buffer_sec * fps) if fps else None)
         if slicing and slicing.enabled:
-            persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing, tracker)
+            persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing, tracker,
+                                    settings.max_batch)
         else:
-            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, tracker)
+            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, tracker, settings.max_batch)
         stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin,
-                         settings.min_person_height_px)
+                         settings.min_person_height_px, settings.max_batch)
     pose = YOLO(settings.pose_model) if settings.pose_model else None
     objects = YOLO(settings.object_model) if with_objects and settings.object_model else None
     preprocess = None

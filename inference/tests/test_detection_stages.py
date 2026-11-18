@@ -193,6 +193,22 @@ def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
     assert distant[1] == pytest.approx((100 / 2000, 50 / 1000, 40 / 2000, 120 / 1000))
 
 
+def test_predictions_are_split_in_batches_the_engine_accepts():
+    from carlyn_inference.detection import predict_batched
+
+    class Model:
+        def __init__(self):
+            self.sizes = []
+
+        def predict(self, images, **kwargs):
+            self.sizes.append(len(images))
+            return list(images)
+
+    model = Model()
+    assert predict_batched(model, list(range(19)), 8, conf=0.2) == list(range(19))
+    assert model.sizes == [8, 8, 3]
+
+
 def test_tracker_buffer_is_set_in_frames_from_seconds():
     from carlyn_inference.detection import byte_tracker
     assert byte_tracker(32).max_frames_lost == 32       # 4 s at 8 FPS

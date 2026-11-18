@@ -166,7 +166,7 @@ class CameraWorker(threading.Thread):
         return {
             "cameraId": self.camera.id,
             "status": self.status,
-            "fps": round(self.fps, 1) if self.fps else None,
+            "fps": round(self.fps, 1) if self.fps and not self.no_signal else None,   # nothing is analyzed without signal
             "latencyMs": self.latency_ms,
             "lastFrameAt": None if self.last_frame_at is None else iso(self.last_frame_at),
             "error": self.no_signal or self.error or (getattr(self.reader, "error", None) if self.reader else None),

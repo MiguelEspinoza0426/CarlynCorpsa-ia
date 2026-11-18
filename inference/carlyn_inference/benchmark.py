@@ -64,18 +64,23 @@ def markdown(report: dict) -> str:
         f"- Versiones: Python {env['python']} · torch {env['torch']} · ultralytics {env['ultralytics']} · commit {env['commit']}",
         f"- Modelo: `{cfg['model']}` · imgsz {cfg['imgsz']} · conf {cfg['conf']} · pose `{cfg['pose_model'] or '—'}`",
     ]
+    if cfg.get("detection_mode") == "two_stage":
+        lines.append(f"- Dos etapas: personas con `{cfg['person_model']}` (conf {cfg['person_conf']}) · EPP en recortes a "
+                     f"imgsz {cfg['epp_imgsz']} con margen {cfg['epp_crop_margin']:.0%}")
     if report.get("source"):
         lines.append(f"- Fuente: {report['source']}")
     if report.get("notes"):
         lines.append(f"- Notas: {report['notes']}")
     lines += ["", "## Por cámara / fuente", "",
-              "| Fuente | Resolución | FPS objetivo | FPS logrados | Detección + tracking (media / p95 ms) | Pose (media ms) | Personas por cuadro | Personas por altura |",
-              "|---|---|---|---|---|---|---|---|"]
+              "| Fuente | Resolución | FPS objetivo | FPS logrados | Detección + tracking (media / p95 ms) | Pose (media ms) | Personas por cuadro | Personas por altura | Personas con algún EPP | EPP por clase |",
+              "|---|---|---|---|---|---|---|---|---|---|"]
     for name, cam in report["cameras"].items():
         det, pose = cam.get("detect_ms") or {}, cam.get("pose_ms") or {}
         sizes = ", ".join(f"{k}: {v}" for k, v in cam.get("person_heights", {}).items()) or "—"
+        epp = ", ".join(f"{k}: {v}" for k, v in cam.get("epp_by_class", {}).items()) or "—"
         lines.append(f"| {name} | {cam.get('resolution') or '—'} | {cam.get('target_fps') or '—'} | {cam.get('achieved_fps') or '—'} | "
-                     f"{det.get('mean', '—')} / {det.get('p95', '—')} | {pose.get('mean', '—')} | {cam.get('persons_per_frame', '—')} | {sizes} |")
+                     f"{det.get('mean', '—')} / {det.get('p95', '—')} | {pose.get('mean', '—')} | {cam.get('persons_per_frame', '—')} | {sizes} | "
+                     f"{cam.get('persons_with_epp', '—')} | {epp} |")
     total = report.get("totals", {})
     if total:
         lines += ["", "## Totales", ""]
@@ -107,7 +112,9 @@ def environment() -> dict:
 
 def run_config(settings: Settings) -> dict:
     return {"model": settings.model_version, "model_path": settings.model_path, "imgsz": settings.imgsz,
-            "conf": settings.conf, "pose_model": settings.pose_model, "device": str(settings.torch_device)}
+            "conf": settings.conf, "pose_model": settings.pose_model, "device": str(settings.torch_device),
+            "detection_mode": settings.detection_mode, "person_model": settings.person_model, "person_conf": settings.person_conf,
+            "epp_imgsz": settings.epp_imgsz, "epp_crop_margin": settings.epp_crop_margin}
 
 
 class _Timings:
@@ -116,6 +123,7 @@ class _Timings:
     def __init__(self):
         self.detect, self.pose = defaultdict(list), defaultdict(list)
         self.persons, self.heights, self.resolution = defaultdict(list), defaultdict(lambda: defaultdict(int)), {}
+        self.with_epp, self.epp = defaultdict(int), defaultdict(lambda: defaultdict(int))
 
     def install(self) -> None:
         from .detection import Detector
@@ -132,6 +140,9 @@ class _Timings:
             timings.persons[key].append(len(result.persons))
             for p in result.persons:
                 timings.heights[key][size_bucket(p.box[3] * h)] += 1
+                timings.with_epp[key] += bool(p.epp)
+                for label in p.epp:
+                    timings.epp[key][label] += 1
             return result
 
         def pose(self_, frame):
@@ -147,7 +158,9 @@ class _Timings:
         return {"resolution": self.resolution.get(key), "detect_ms": stats(self.detect.get(key, [])),
                 "pose_ms": stats(self.pose.get(key, [])), "frames": len(persons),
                 "persons_per_frame": round(statistics.mean(persons), 2) if persons else 0,
-                "person_heights": {label: self.heights[key].get(label, 0) for _, _, label in SIZE_BUCKETS}}
+                "person_heights": {label: self.heights[key].get(label, 0) for _, _, label in SIZE_BUCKETS},
+                "persons_with_epp": f"{self.with_epp[key] / max(1, sum(persons)):.0%}",
+                "epp_by_class": dict(sorted(self.epp[key].items()))}
 
 
 # ---------- offline mode ----------
@@ -172,14 +185,13 @@ def read_frames(source: str, limit: int, resize: tuple[int, int] | None) -> list
 
 
 def offline(args, settings: Settings) -> dict:
-    from .detection import Detector, blur_faces
+    from .detection import blur_faces, create_detector
     from .drawing import encode_jpeg
 
     timings = _Timings()
     timings.install()
     frames = read_frames(args.source, args.frames, args.resize)
-    detector = Detector(settings.model_path, settings.pose_model or None, None, "persona", frozenset(args.epp_classes),
-                        settings.torch_device, settings.imgsz, settings.conf)
+    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False)
     for frame in frames[:5]:            # warm-up: CUDA kernels and cuDNN autotuning
         detector.detect(frame, False)
     timings.__init__()
@@ -265,6 +277,8 @@ def main() -> None:
     p.add_argument("--notes", default="", help="contexto libre que se guarda con el resultado")
     p.add_argument("--model", help="pesos a medir (por defecto MODEL_PATH, como el servicio)")
     p.add_argument("--imgsz", type=int, help="tamaño de inferencia (por defecto IMGSZ)")
+    p.add_argument("--mode-detection", choices=("two_stage", "single"), help="por defecto DETECTION_MODE")
+    p.add_argument("--epp-imgsz", type=int, help="tamaño de inferencia de los recortes de EPP (por defecto EPP_IMGSZ)")
     sub = p.add_subparsers(dest="mode", required=True)
     off = sub.add_parser("offline", help="video o carpeta de imágenes")
     off.add_argument("--source", required=True)
@@ -278,7 +292,8 @@ def main() -> None:
     args = p.parse_args()
 
     settings = Settings.from_env()
-    overrides = {k: v for k, v in (("model_path", args.model), ("imgsz", args.imgsz)) if v}
+    overrides = {k: v for k, v in (("model_path", args.model), ("imgsz", args.imgsz), ("detection_mode", args.mode_detection),
+                                   ("epp_imgsz", args.epp_imgsz)) if v}
     if overrides:
         settings = Settings(**{**settings.__dict__, **overrides})
 

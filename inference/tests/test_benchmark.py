@@ -41,7 +41,7 @@ def _report():
 
 def test_markdown_has_one_row_per_camera():
     text = markdown(_report())
-    assert "| Camara 1 | 1920x1080 | 20 | 8.2 | 95.0 / 120.0 | — | 1.5 | <60 px: 3, 60–150 px: 2, ≥150 px: 1 |" in text
+    assert "| Camara 1 | 1920x1080 | 20 | 8.2 | 95.0 / 120.0 | — | 1.5 | <60 px: 3, 60–150 px: 2, ≥150 px: 1 | — | — |" in text
     assert "GTX 1650" in text
 
 

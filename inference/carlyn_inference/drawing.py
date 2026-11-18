@@ -7,7 +7,15 @@ from .geometry import Box, foot_point, point_in_polygon
 from .rules import EventOut, PersonObs
 
 ZONE_COLORS = {"Work": (0, 200, 0), "Circulation": (255, 170, 0), "Danger": (0, 140, 255), "Restricted": (0, 0, 230)}
-OK, ALERT = (60, 200, 60), (40, 40, 230)
+OK, ALERT, UNJUDGED = (60, 200, 60), (40, 40, 230), (200, 200, 200)
+
+
+def missing_epp(camera: CameraConfig, person: PersonObs) -> list[str]:
+    """Required EPP the person lacks in the zones where they stand; nothing when their EPP was not judged (too small)."""
+    if not person.epp_evaluated:
+        return []
+    return sorted(set().union(*[z.required_epp - person.epp for z in camera.zones
+                                if z.required_epp and point_in_polygon(foot_point(person.box), z.polygon)]))
 
 
 def _px(box: Box, w: int, h: int) -> tuple[int, int, int, int]:
@@ -29,9 +37,8 @@ def draw(frame: np.ndarray, camera: CameraConfig, persons: list[PersonObs], coun
     out = cv2.addWeighted(overlay, 0.12, out, 0.88, 0)
 
     for p in persons:
-        missing = sorted(set().union(*[z.required_epp - p.epp for z in camera.zones
-                                       if z.required_epp and point_in_polygon(foot_point(p.box), z.polygon)]))
-        color = ALERT if missing or p.fallen else OK
+        missing = missing_epp(camera, p)
+        color = ALERT if missing or p.fallen else OK if p.epp_evaluated else UNJUDGED
         x1, y1, x2, y2 = _px(p.box, w, h)
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
         text = f"#{p.track_id}" + (" CAIDA?" if p.fallen else "") + (f" falta: {', '.join(missing)}" if missing else "")

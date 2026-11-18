@@ -83,3 +83,13 @@ def test_blur_padding_covers_a_face_that_moved_since_the_last_analysis():
     ys, xs = slice(int(0.22 * h), int(0.30 * h)), slice(int(0.36 * w), int(0.39 * w))
     assert np.array_equal(blur_faces(frame, [PERSON], [])[ys, xs], frame[ys, xs])
     assert not np.array_equal(blur_faces(frame, [PERSON], [], padding=0.5)[ys, xs], frame[ys, xs])
+
+
+def test_overlay_does_not_claim_missing_epp_for_persons_too_small_to_judge(camera_factory):
+    from carlyn_inference.drawing import missing_epp
+    from conftest import zone
+    camera = camera_factory(zone("z", "Work", required=("mandil",), polygon=[(0, 0), (1, 0), (1, 1), (0, 1)]))
+    far = PersonObs(1, (0.4, 0.2, 0.05, 0.1), 0.6, frozenset(), epp_evaluated=False)
+    near = PersonObs(2, (0.4, 0.2, 0.2, 0.6), 0.9, frozenset())
+    assert missing_epp(camera, far) == []
+    assert missing_epp(camera, near) == ["mandil"]

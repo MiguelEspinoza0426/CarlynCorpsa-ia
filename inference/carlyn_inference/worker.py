@@ -11,6 +11,7 @@ from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
 from .settings import Settings
 from .sources import open_source, with_credentials
+from .sources.signal import SignalMonitor
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ class CameraWorker(threading.Thread):
         self.latency_ms: int | None = None
         self.last_frame_at: float | None = None
         self.error: str | None = None
+        self.signal = SignalMonitor(settings.no_signal_sec)
+        self.no_signal: str | None = None      # reason while the DVR sends no real image
         self.stream = LiveStream(self._read_frame, settings.stream_fps, settings.jpeg_quality, settings.stream_max_width,
                                  settings.blur_stream, camera.name)
         self.latest_frame = None
@@ -50,6 +53,9 @@ class CameraWorker(threading.Thread):
 
     @property
     def status(self) -> str:
+        if self.no_signal and getattr(self.reader, "connected", True):
+            # The stream is alive but carries no image: not Online (see settings.no_signal_status).
+            return self.settings.no_signal_status
         if self.reader is None:
             return "Reconnecting"
         if not getattr(self.reader, "connected", True):
@@ -93,6 +99,12 @@ class CameraWorker(threading.Thread):
                 time.sleep(0.01)
                 continue
             last_ts = ts
+            self.signal.update(frame, time.time())
+            self.no_signal = self.signal.reason(time.time())
+            if self.no_signal:
+                # Nothing to analyze: the GPU is left to the other cameras.
+                time.sleep(max(0.0, 1 / self.camera.target_fps - (time.time() - started)))
+                continue
             try:
                 self._process(frame, ts)
                 self.error = None
@@ -100,7 +112,8 @@ class CameraWorker(threading.Thread):
                 self.error = str(ex)
                 log.exception("Error processing a frame of %s", self.camera.name)
                 time.sleep(1)
-            if time.time() - last_metrics >= self.settings.metrics_flush_sec:
+            if time.time() - last_metrics >= self.settings.metrics_flush_sec and self._running:
+                # Not after stop(): a removed camera must not send metrics of its (deleted) zones.
                 with self._engine_lock:
                     self.outbox.add_metrics(self.camera.id, *self.engine.take_metrics())
                 last_metrics = time.time()
@@ -157,5 +170,5 @@ class CameraWorker(threading.Thread):
             "fps": round(self.fps, 1) if self.fps else None,
             "latencyMs": self.latency_ms,
             "lastFrameAt": None if self.last_frame_at is None else iso(self.last_frame_at),
-            "error": self.error or (getattr(self.reader, "error", None) if self.reader else None),
+            "error": self.no_signal or self.error or (getattr(self.reader, "error", None) if self.reader else None),
         }

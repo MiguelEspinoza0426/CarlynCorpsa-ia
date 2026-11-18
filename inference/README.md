@@ -88,6 +88,8 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `PERSON_MODEL`, `PERSON_CONF` | Modelo de personas de la primera etapa (COCO) y su confianza mínima (baja a propósito: ByteTrack solo inicia tracks desde 0,25) | `yolo11s.pt`, `0.2` |
 | `MIN_PERSON_HEIGHT_PX` | Altura mínima (px de la imagen original) para evaluar el EPP de una persona. Las más pequeñas se cuentan y siguen, pero la regla de EPP las ignora | `150` |
 | `TRACK_BUFFER_SEC` | Segundos que una persona que deja de verse (columna, camión, contraluz) conserva su ID de seguimiento. También es el tiempo tras el cual el motor de reglas cierra su permanencia | `4` |
+| `NO_SIGNAL_SEC` | Segundos de imagen negra, uniforme o con el logo del DVR antes de reportar la cámara sin señal (imagen congelada: 30 s). Mientras tanto no se analiza | `5` |
+| `NO_SIGNAL_STATUS` | Estado que se envía en el heartbeat para una cámara sin señal; el motivo va en `error`. Cambiará a `NoSignal` cuando la API lo admita | `Offline` |
 | `EPP_IMGSZ`, `EPP_CROP_MARGIN` | Tamaño de inferencia de los recortes de EPP y margen alrededor de cada persona | `640`, `0.15` |
 | `POSE_MODEL` | Modelo de postura (caídas y pixelado de rostros); vacío lo desactiva | `yolo11n-pose.pt` |
 | `OBJECT_MODEL` | Modelo COCO para condiciones inseguras; vacío lo desactiva | vacío |

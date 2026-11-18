@@ -59,3 +59,22 @@ def test_monitor_detects_a_frozen_image():
     for t in range(0, 31, 5):
         live.update(_scene(t), float(t))                                     # noise changes every frame
     assert live.reason(30.0) is None
+
+
+def test_worker_reports_no_signal_instead_of_online(camera_factory):
+    from types import SimpleNamespace
+
+    from carlyn_inference.config import NodeConfig
+    from carlyn_inference.settings import Settings
+    from carlyn_inference.worker import CameraWorker
+
+    camera = camera_factory()
+    node = NodeConfig("v1", "gpu-01", frozenset(), "persona", [camera])
+    worker = CameraWorker(camera, node, Settings(), outbox=None)
+    worker.reader, worker.last_frame_at = SimpleNamespace(connected=True, error=None), __import__("time").time()
+    assert worker.status == "Online"
+    worker.no_signal = "Sin señal: el DVR envía una imagen negra, uniforme o su logo"
+    beat = worker.heartbeat()
+    assert beat["status"] == "Offline" and beat["error"].startswith("Sin señal")
+    worker.reader.connected = False
+    assert worker.status == "Reconnecting"            # a broken stream is still reported as such

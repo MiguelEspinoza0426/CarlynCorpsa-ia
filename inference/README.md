@@ -94,7 +94,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `IMGSZ`, `CONF` | Resolución y confianza mínima de detección | `640`, `0.25` |
 | `PORT` | Puerto HTTP del servicio | `8100` |
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
-| `SLICE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "enabled": true, "roi": [0, 0, 1, 0.3] } }`: SAHI por cámara para pruebas, mientras la API no lo envíe (`inference.slice`) | `{}` |
+| `INFERENCE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "slice": {...}, "preprocess": {...} } }`: el bloque `inference` de una cámara, para probar SAHI y la corrección de contraste mientras la API no lo envíe | `{}` |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
 | `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros en el video en vivo» de la plataforma; `false` lo desactiva en todas | `true` |
 | `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |

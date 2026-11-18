@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 
 from .geometry import Point
+from .preprocess import PreprocessConfig
+from .preprocess import PreprocessConfig
 from .slicing import SliceConfig
 
 
@@ -39,6 +41,30 @@ class Zone:
 
 
 @dataclass(frozen=True)
+class InferenceConfig:
+    """Per-camera detection settings (`inference` block); everything off when the API does not send it."""
+    slicing: SliceConfig = SliceConfig()
+    preprocess: PreprocessConfig = PreprocessConfig()
+
+    @staticmethod
+    def parse(data: dict | None) -> "InferenceConfig":
+        data = data or {}
+        return InferenceConfig(SliceConfig.parse(data.get("slice")), PreprocessConfig.parse(data.get("preprocess")))
+
+
+@dataclass(frozen=True)
+class InferenceConfig:
+    """Per-camera detection settings (`inference` block); everything off when the API does not send it."""
+    slicing: SliceConfig = SliceConfig()
+    preprocess: PreprocessConfig = PreprocessConfig()
+
+    @staticmethod
+    def parse(data: dict | None) -> "InferenceConfig":
+        data = data or {}
+        return InferenceConfig(SliceConfig.parse(data.get("slice")), PreprocessConfig.parse(data.get("preprocess")))
+
+
+@dataclass(frozen=True)
 class CameraConfig:
     id: str
     name: str
@@ -48,8 +74,12 @@ class CameraConfig:
     zones: list[Zone] = field(default_factory=list)
     # Pixelate faces in the live video (evidence images and snapshots are always pixelated).
     blur_faces: bool = True
-    # SAHI for distant persons (inference.slice); disabled when the API does not send it.
-    slicing: SliceConfig = SliceConfig()
+    # SAHI and contrast correction; changing them restarts the camera's worker (new models).
+    inference: InferenceConfig = InferenceConfig()
+
+    @property
+    def slicing(self) -> SliceConfig:
+        return self.inference.slicing
 
     @property
     def source_key(self) -> tuple:
@@ -89,5 +119,5 @@ def parse(data: dict) -> NodeConfig:
         person_class=data["model"]["personClass"],
         cameras=[CameraConfig(c["id"], c["name"], c["streamUrl"], c.get("credentialsRef"), c["targetFps"],
                               [zone(z) for z in c.get("zones", [])], c.get("blurFaces", True),
-                              SliceConfig.parse((c.get("inference") or {}).get("slice"))) for c in data["cameras"]],
+                              InferenceConfig.parse(c.get("inference"))) for c in data["cameras"]],
     )

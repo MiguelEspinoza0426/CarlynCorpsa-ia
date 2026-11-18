@@ -7,6 +7,8 @@ import numpy as np
 
 from .crops import belongs_to, crop_region, to_frame_box
 from .geometry import Box, center, contains, iou
+from .preprocess import Preprocessor
+from .preprocess import Preprocessor
 from .slicing import SliceConfig, cut_by_tile, merge, tile_regions
 from .rules import ObjectObs, PersonObs
 
@@ -187,10 +189,11 @@ class Detector:
     """One instance per camera: Ultralytics trackers keep state per model instance."""
 
     def __init__(self, stage: SingleStage | TwoStage, pose_model=None, object_model=None, device=None, imgsz: int = 640,
-                 min_person_height_px: int = 0):
+                 min_person_height_px: int = 0, preprocess: Preprocessor | None = None):
         self.stage, self.pose, self.objects = stage, pose_model, object_model
         self.device, self.imgsz = device, imgsz
         self.min_person_height_px = min_person_height_px
+        self.preprocess = preprocess
 
     def set_epp_min_confidence(self, minimums: dict[str, float]) -> None:
         """Applied from the next frame on: changing a class threshold in the platform needs no restart."""
@@ -198,7 +201,8 @@ class Detector:
 
     def detect(self, frame: np.ndarray, detect_objects: bool) -> Detections:
         h, w = frame.shape[:2]
-        raw_persons, epp, epp_boxes = self.stage.run(frame)
+        # Persons and EPP are searched in the corrected frame; pose, evidence and live video use the original one.
+        raw_persons, epp, epp_boxes = self.stage.run(self.preprocess(frame) if self.preprocess else frame)
         lying = [p for p in raw_persons if p[1][2] * w > FALL_ASPECT * p[1][3] * h]
         keypoints = self._pose(frame) if lying and self.pose else []
         persons = []
@@ -247,12 +251,12 @@ DETECTION_MODES = ("two_stage", "single")
 COCO_PERSON = "person"
 
 
-def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool,
-                    slicing: SliceConfig | None = None) -> Detector:
-    """Loads the models of one camera according to the node settings (DETECTION_MODE) and its slicing (SAHI)."""
+def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool, inference=None) -> Detector:
+    """Loads the models of one camera according to the node settings (DETECTION_MODE) and its `inference` block."""
     from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
 
     device = settings.torch_device
+    slicing = inference.slicing if inference else None
     epp_model = YOLO(settings.model_path)
     if settings.detection_mode == "single":
         stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
@@ -266,7 +270,11 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
                          settings.min_person_height_px)
     pose = YOLO(settings.pose_model) if settings.pose_model else None
     objects = YOLO(settings.object_model) if with_objects and settings.object_model else None
-    return Detector(stage, pose, objects, device, settings.imgsz, settings.min_person_height_px)
+    preprocess = None
+    if inference and inference.preprocess.enabled:
+        # Without its own ROI, the correction covers the SAHI region (where distant workers are) or the whole frame.
+        preprocess = Preprocessor(inference.preprocess, slicing.roi if slicing and slicing.enabled else None)
+    return Detector(stage, pose, objects, device, settings.imgsz, settings.min_person_height_px, preprocess)
 
 
 PIXELATION_BLOCKS = 6       # a face region is reduced to about 6x6 blocks: not recognizable

@@ -83,6 +83,7 @@ def test_camera_slicing_is_parsed():
     data["cameras"][0]["inference"] = {"slice": {"enabled": True, "tileSize": 640, "overlap": 0.2, "roi": [0, 0, 1, 0.3]}}
     slicing = config_module.parse(data).cameras[0].slicing
     assert slicing.enabled and slicing.roi == (0.0, 0.0, 1.0, 0.3)
+    assert config_module.parse(data).cameras[0].inference.preprocess.mode == "none"
 
 
 def test_credentials_come_from_the_environment(monkeypatch):
@@ -207,7 +208,7 @@ def test_service_starts_restarts_and_stops_workers():
 
     restarted = service.workers["cam-1"]
     sliced = json.loads(json.dumps(moved))
-    sliced["cameras"][0]["inference"] = {"slice": {"enabled": True, "roi": [0, 0, 1, 0.3]}}
+    sliced["cameras"][0]["inference"] = {"slice": {"enabled": True, "roi": [0, 0, 1, 0.3]}, "preprocess": {"mode": "clahe"}}
     service.apply(config_module.parse(sliced))
     assert restarted.stopped and service.workers["cam-1"] is not restarted   # new models for the new slicing
 

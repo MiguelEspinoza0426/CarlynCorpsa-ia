@@ -26,7 +26,7 @@ import cv2
 import numpy as np
 
 from .settings import REPO, Settings
-from .slicing import SliceConfig
+from .config import InferenceConfig
 
 OUT_DIR = REPO / "docs" / "benchmarks"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
@@ -86,6 +86,9 @@ def markdown(report: dict) -> str:
     if sliced:
         lines += ["", "SAHI: " + "; ".join(f"{name}: mosaicos de {s['tile_size']} px, solape {s['overlap']:.0%}, ROI {s['roi']}"
                                             for name, s in sliced.items())]
+    corrected = {name: cam["preprocess"] for name, cam in report["cameras"].items() if cam.get("preprocess")}
+    if corrected:
+        lines += ["", "Corrección de contraste: " + "; ".join(f"{name}: {mode}" for name, mode in corrected.items())]
     total = report.get("totals", {})
     if total:
         lines += ["", "## Totales", ""]
@@ -198,8 +201,10 @@ def offline(args, settings: Settings) -> dict:
     timings = _Timings()
     timings.install()
     frames = read_frames(args.source, args.frames, args.resize, args.stride)
-    slicing = SliceConfig.parse(json.loads(args.slice)) if args.slice else None
-    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, slicing=slicing)
+    inference = InferenceConfig.parse({"slice": json.loads(args.slice) if args.slice else None,
+                                       "preprocess": json.loads(args.preprocess) if args.preprocess else None})
+    slicing = inference.slicing
+    detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, inference=inference)
     for frame in frames[:5]:            # warm-up: CUDA kernels and cuDNN autotuning
         detector.detect(frame, False)
     timings.__init__()
@@ -219,6 +224,8 @@ def offline(args, settings: Settings) -> dict:
     detect_mean = camera["detect_ms"]["mean"]
     if slicing and slicing.enabled:
         camera["slicing"] = {"tile_size": slicing.tile_size, "overlap": slicing.overlap, "roi": list(slicing.roi)}
+    if inference.preprocess.enabled:
+        camera["preprocess"] = inference.preprocess.mode
     sampled = f", 1 de cada {args.stride}" if args.stride > 1 else ""
     return {"source": f"{args.source} ({len(frames)} cuadros{sampled})", "cameras": {Path(args.source).name: camera},
             "totals": {"Capacidad de detección (sin pose ni video)": f"{1000 / detect_mean:.1f} cuadros/s en total",
@@ -271,8 +278,11 @@ def live(args, settings: Settings) -> dict:
     for w in workers:
         camera = timings.camera(w.name)
         camera["target_fps"] = w.camera.target_fps
-        if w.slicing.enabled:
-            camera["slicing"] = {"tile_size": w.slicing.tile_size, "overlap": w.slicing.overlap, "roi": list(w.slicing.roi)}
+        slicing, preprocess = w.inference.slicing, w.inference.preprocess
+        if slicing.enabled:
+            camera["slicing"] = {"tile_size": slicing.tile_size, "overlap": slicing.overlap, "roi": list(slicing.roi)}
+        if preprocess.enabled:
+            camera["preprocess"] = preprocess.mode
         camera["achieved_fps"] = round(camera["frames"] / elapsed, 1)
         camera["status"], camera["latency_ms"], camera["error"] = statuses[w.name]
         busy_ms += sum(timings.detect.get(w.name, [])) + sum(timings.pose.get(w.name, []))
@@ -298,6 +308,7 @@ def main() -> None:
     off.add_argument("--frames", type=int, default=300)
     off.add_argument("--stride", type=int, default=1, help="tomar 1 de cada N cuadros del video")
     off.add_argument("--resize", type=lambda s: tuple(int(v) for v in s.lower().split("x")), help="p. ej. 1280x720")
+    off.add_argument("--preprocess", help='corrección de contraste, p. ej. {"mode": "clahe"} o {"mode": "gamma", "gamma": 1.8}')
     off.add_argument("--slice", help='SAHI como en la cámara, p. ej. {"enabled": true, "roi": [0, 0, 1, 0.3]}')
     off.add_argument("--epp-classes", nargs="*", default=["careta_soldar", "guantes", "calzado", "mandil", "traje", "protector_facial", "lentes"])
     on = sub.add_parser("live", help="cámaras reales del nodo (detenga antes el servicio)")

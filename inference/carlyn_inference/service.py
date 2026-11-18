@@ -78,9 +78,9 @@ class InferenceService:
                     self.workers.pop(camera_id).stop()
             for camera in node.cameras:
                 worker = self.workers.get(camera.id)
-                # The source, the rate and the slicing are fixed when a worker starts: changing them restarts it.
+                # The source, the rate and the inference block are fixed when a worker starts: changing them restarts it.
                 if worker is not None and (worker.camera.source_key != camera.source_key or worker.camera.target_fps != camera.target_fps
-                                           or worker.camera.slicing != camera.slicing):
+                                           or worker.camera.inference != camera.inference):
                     worker.stop()
                     worker = None
                 if worker is None:

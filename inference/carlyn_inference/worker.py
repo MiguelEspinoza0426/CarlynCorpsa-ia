@@ -4,13 +4,12 @@ import threading
 import time
 
 from .api_client import Outbox, event_payload, iso
-from .config import CameraConfig, NodeConfig
+from .config import CameraConfig, InferenceConfig, NodeConfig
 from .detection import Detector, blur_faces, create_detector
 from .drawing import draw_event, encode_jpeg
 from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
 from .settings import Settings
-from .slicing import SliceConfig
 from .sources import open_source, with_credentials
 
 log = logging.getLogger(__name__)
@@ -44,10 +43,10 @@ class CameraWorker(threading.Thread):
         return overrides.get(self.camera.id) or overrides.get(self.camera.name) or with_credentials(self.camera.stream_url, self.camera.credentials_ref)
 
     @property
-    def slicing(self) -> SliceConfig:
-        overrides = self.settings.slice_overrides
+    def inference(self) -> InferenceConfig:
+        overrides = self.settings.inference_overrides
         override = overrides.get(self.camera.id) or overrides.get(self.camera.name)
-        return SliceConfig.parse(override) if override else self.camera.slicing
+        return InferenceConfig.parse(override) if override else self.camera.inference
 
     @property
     def status(self) -> str:
@@ -78,7 +77,7 @@ class CameraWorker(threading.Thread):
     def run(self) -> None:
         try:
             self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
-                                            slicing=self.slicing)
+                                            inference=self.inference)
             self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
             self.reader = open_source(self.source, self.camera.name)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat

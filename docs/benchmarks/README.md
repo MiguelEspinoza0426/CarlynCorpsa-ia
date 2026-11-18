@@ -61,7 +61,7 @@ Mismo video escalado a 1920×1080 en la RTX 5070:
 | [SAHI en todo el cuadro](2026-11-17_2114_sahi-completo-video-1920_desktop-gl450ej.md) | 67,9 / 94,4 ms | 10,9 | 3,09 | 5 / 46 / 286 | 19 % |
 
 - **Costo:** SAHI limitado a una franja como «Fondo nave» suma ~4 ms, porque los mosaicos van en el mismo batch. En todo el cuadro suma ~19 ms.
-- **Límite de esta medición:** el video tiene 848×480 de origen. Al escalarlo no aparecen personas lejanas nuevas, así que no mide la ganancia real en el fondo de Camara 1. Eso queda para el modo `live` en la PC de la empresa con `SLICE_OVERRIDES`, y para el recall por distancia del paso 8.
+- **Límite de esta medición:** el video tiene 848×480 de origen. Al escalarlo no aparecen personas lejanas nuevas, así que no mide la ganancia real en el fondo de Camara 1. Eso queda para el modo `live` en la PC de la empresa con `INFERENCE_OVERRIDES`, y para el recall por distancia del paso 8.
 - **Fusión:** una primera versión unía también cajas contenidas una en otra aunque no las hubiera cortado un mosaico. Eso juntaba a dos personas, una delante de la otra (2,28 personas por cuadro contra 2,48 de Ultralytics). Ahora solo se unen las cajas cortadas por el borde de un mosaico.
 
 ## Grabaciones reales de Camara 1 (17/11/2026)

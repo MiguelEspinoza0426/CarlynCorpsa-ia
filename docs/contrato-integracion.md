@@ -139,7 +139,8 @@
   "cameras": [ { "cameraId": "..", "status": "Online", "fps": 9.8, "latencyMs": 140, "lastFrameAt": "..", "error": null } ]
 }
 ```
-- `status` ∈ `Online`, `Reconnecting`, `Offline`.
+- `status` ∈ `Online`, `Reconnecting`, `Offline`; `NoSignal` cuando la API lo admita (paso 6). Una cámara **sin señal** es aquella cuyo DVR mantiene el stream pero envía una imagen negra, uniforme o con su logo durante `NO_SIGNAL_SEC` (5 s), o una imagen congelada durante 30 s. No se analiza; hasta el paso 6 se reporta `Offline` y el motivo va en `error` («Sin señal: …»).
+- El nodo descarta los datos pendientes de cámaras y zonas que ya no están en la configuración: no reintenta enviarlos.
 - La API usa **su propia hora** como hora del último heartbeat.
 - Sin heartbeat en `Ingest:HeartbeatTimeoutSeconds` (60 s), la cámara pasa a `Offline` y se emite `cameraStatusChanged`.
 

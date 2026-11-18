@@ -7,6 +7,7 @@ import numpy as np
 
 from .crops import belongs_to, crop_region, to_frame_box
 from .geometry import Box, center, contains, iou
+from .slicing import SliceConfig, cut_by_tile, merge, tile_regions
 from .rules import ObjectObs, PersonObs
 
 # COCO classes that may obstruct walkways (used only if an object model is configured).
@@ -79,25 +80,74 @@ class SingleStage:
         return persons, associate_epp(persons, epp_boxes), epp_boxes
 
 
+class TrackedPersons:
+    """First stage on the whole frame, reduced to imgsz, with Ultralytics' tracking."""
+
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float):
+        self.model, self.device, self.imgsz, self.conf = model, device, imgsz, conf
+        # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
+        self.classes = [i for i, name in model.names.items() if name in person_classes]
+
+    def track(self, frame: np.ndarray) -> list[RawPerson]:
+        result = self.model.track(frame, persist=True, conf=self.conf, imgsz=self.imgsz, classes=self.classes,
+                                  device=self.device, tracker="bytetrack.yaml", verbose=False)[0]
+        return [(track_id, box, conf) for _, box, conf, track_id in _boxes(result) if track_id is not None]
+
+
+class SlicedPersons:
+    """First stage with SAHI: the whole frame plus tiles of the camera's ROI in one batch, merged, then ByteTrack.
+
+    Distant workers (~20x60 px in Camara 1) disappear when the whole frame is reduced to 640 px; inside a tile they
+    keep their pixels.
+    """
+
+    def __init__(self, model, person_classes: frozenset[str], device, conf: float, config: SliceConfig, tracker=None):
+        self.model, self.device, self.conf, self.config = model, device, conf, config
+        self.classes = [i for i, name in model.names.items() if name in person_classes]
+        self.half = device != "cpu"
+        self.tracker = tracker or _byte_tracker()
+
+    def track(self, frame: np.ndarray) -> list[RawPerson]:
+        from ultralytics.engine.results import Boxes
+
+        h, w = frame.shape[:2]
+        regions = tile_regions(w, h, self.config)
+        results = self.model.predict([frame[y1:y2, x1:x2] for x1, y1, x2, y2 in regions], imgsz=self.config.tile_size,
+                                     conf=self.conf, classes=self.classes, device=self.device, half=self.half, verbose=False)
+        found = []
+        for r, region in zip(results, regions):
+            if r.boxes is not None and len(r.boxes):
+                xyxy = np.asarray(r.boxes.xyxy.tolist(), dtype=float).reshape(-1, 4) + [region[0], region[1], region[0], region[1]]
+                found.append((xyxy, np.asarray(r.boxes.conf.tolist(), dtype=float), cut_by_tile(xyxy, region, w, h)))
+        xyxy, conf, cut = (np.concatenate(parts) for parts in zip(*found)) if found else (np.empty((0, 4)), np.empty(0), None)
+        boxes, scores = merge(xyxy, conf, self.config.iou, self.config.min_box_px, cut)
+        data = np.column_stack([boxes, scores, np.zeros(len(scores))]).astype(np.float32) if len(scores) else np.empty((0, 6), np.float32)
+        tracks = self.tracker.update(Boxes(data, (h, w)), frame)
+        return [(int(t[4]), (t[0] / w, t[1] / h, (t[2] - t[0]) / w, (t[3] - t[1]) / h), float(t[5])) for t in tracks]
+
+
+def _byte_tracker():
+    """Same ByteTrack (and settings) as Ultralytics' track(), fed with the merged detections."""
+    from ultralytics.trackers.byte_tracker import BYTETracker
+    from ultralytics.utils import IterableSimpleNamespace, YAML
+    from ultralytics.utils.checks import check_yaml
+    return BYTETracker(IterableSimpleNamespace(**YAML.load(check_yaml("bytetrack.yaml"))))
+
+
 class TwoStage:
-    """Persons with a general model and tracking; then EPP in each person's crop, taken from the full-resolution frame.
+    """Persons first (TrackedPersons or SlicedPersons); then EPP in each person's crop, taken from the full-resolution frame.
 
     Small or distant workers keep their pixels for the EPP model, instead of being reduced with the whole frame.
     """
 
-    def __init__(self, person_model, epp_model, person_classes: frozenset[str], epp_classes: frozenset[str], device,
-                 person_imgsz: int, person_conf: float, epp_imgsz: int, epp_conf: float, margin: float):
-        self.person_model, self.epp_model = person_model, epp_model
+    def __init__(self, persons: TrackedPersons | SlicedPersons, epp_model, epp_classes: frozenset[str], device,
+                 epp_imgsz: int, epp_conf: float, margin: float):
+        self.persons, self.epp_model = persons, epp_model
         self.epp_classes, self.device = epp_classes, device
-        self.person_imgsz, self.person_conf = person_imgsz, person_conf
         self.epp_imgsz, self.epp_conf, self.margin = epp_imgsz, epp_conf, margin
-        # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
-        self.person_ids = [i for i, name in person_model.names.items() if name in person_classes]
 
     def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
-        result = self.person_model.track(frame, persist=True, conf=self.person_conf, imgsz=self.person_imgsz,
-                                         classes=self.person_ids, device=self.device, tracker="bytetrack.yaml", verbose=False)[0]
-        persons = [(track_id, box, conf) for _, box, conf, track_id in _boxes(result) if track_id is not None]
+        persons = self.persons.track(frame)
         epp: dict[int, set[str]] = {track_id: set() for track_id, _, _ in persons}
         h, w = frame.shape[:2]
         crops = [(track_id, box, region) for track_id, box, _ in persons
@@ -178,8 +228,9 @@ DETECTION_MODES = ("two_stage", "single")
 COCO_PERSON = "person"
 
 
-def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool) -> Detector:
-    """Loads the models of one camera according to the node settings (DETECTION_MODE)."""
+def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool,
+                    slicing: SliceConfig | None = None) -> Detector:
+    """Loads the models of one camera according to the node settings (DETECTION_MODE) and its slicing (SAHI)."""
     from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
 
     device = settings.torch_device
@@ -187,8 +238,9 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
     if settings.detection_mode == "single":
         stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
     else:
-        stage = TwoStage(YOLO(settings.person_model), epp_model, frozenset({person_class, COCO_PERSON}), epp_classes, device,
-                         settings.imgsz, settings.person_conf, settings.epp_imgsz, settings.conf, settings.epp_crop_margin)
+        person_model, classes = YOLO(settings.person_model), frozenset({person_class, COCO_PERSON})
+        persons = SlicedPersons(person_model, classes, device, settings.person_conf, slicing) if slicing and slicing.enabled             else TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
+        stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin)
     pose = YOLO(settings.pose_model) if settings.pose_model else None
     objects = YOLO(settings.object_model) if with_objects and settings.object_model else None
     return Detector(stage, pose, objects, device, settings.imgsz)

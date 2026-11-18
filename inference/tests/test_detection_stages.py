@@ -2,7 +2,8 @@
 import numpy as np
 import pytest
 
-from carlyn_inference.detection import Detector, SingleStage, TwoStage
+from carlyn_inference.detection import Detector, SingleStage, SlicedPersons, TrackedPersons, TwoStage
+from carlyn_inference.slicing import SliceConfig
 
 
 class _List(list):
@@ -61,7 +62,8 @@ EPP = frozenset({"casco", "mandil"})
 
 def _two_stage(person_rows, ids, epp_rows):
     persons, epp = _PersonModel(person_rows, ids), _EppModel(epp_rows)
-    return TwoStage(persons, epp, frozenset({"persona", "person"}), EPP, "cpu", 640, 0.3, 320, 0.25, 0.15), persons, epp
+    tracked = TrackedPersons(persons, frozenset({"persona", "person"}), "cpu", 640, 0.3)
+    return TwoStage(tracked, epp, EPP, "cpu", 320, 0.25, 0.15), persons, epp
 
 
 def test_two_stage_finds_epp_in_full_resolution_crops():
@@ -115,3 +117,47 @@ def test_detector_builds_person_observations_from_any_stage():
     detections = Detector(stage).detect(FRAME, detect_objects=False)
     person = detections.persons[0]
     assert (person.track_id, person.confidence, person.epp, person.fallen) == (7, 0.812, frozenset({"mandil"}), False)
+
+
+class _TilePersonModel:
+    """Finds one distant person (40x120 px) only when it gets a tile, and a nearby one in the whole frame."""
+    names = {0: "person"}
+
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, crops, **kwargs):
+        self.calls.append(([c.shape[:2] for c in crops], kwargs))
+        out = []
+        for i, crop in enumerate(crops):
+            h, w = crop.shape[:2]
+            if i == 0:
+                rows = [(0, 0.9, 1500, 600, 1700, 1000)]           # nearby person, whole frame
+            elif i == 1:
+                rows = [(0, 0.6, 100, 50, 140, 170)]               # distant person inside the first tile
+            else:
+                rows = []
+            out.append(_Result(self.names, _Boxes(rows, (w, h))))
+        return out
+
+
+class _FakeTracker:
+    def __init__(self):
+        self.seen = None
+
+    def update(self, boxes, img):
+        self.seen = boxes
+        return np.array([[*xyxy, i + 1, conf, 0, i] for i, (xyxy, conf) in enumerate(zip(boxes.xyxy.tolist(), boxes.conf.tolist()))])
+
+
+def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
+    model, tracker = _TilePersonModel(), _FakeTracker()
+    config = SliceConfig(enabled=True, roi=(0.0, 0.0, 1.0, 0.3))          # 2000x300 px band: one row of tiles
+    persons = SlicedPersons(model, frozenset({"person"}), "cpu", 0.3, config, tracker).track(FRAME)
+
+    shapes, kwargs = model.calls[0]
+    assert shapes[0] == (1000, 2000) and all(s[0] == 300 for s in shapes[1:])   # one batch: whole frame + tiles
+    assert kwargs["half"] is False and kwargs["classes"] == [0]
+    assert len(persons) == 2
+    distant = min(persons, key=lambda p: p[1][3])
+    assert distant[1] == pytest.approx((100 / 2000, 50 / 1000, 40 / 2000, 120 / 1000))

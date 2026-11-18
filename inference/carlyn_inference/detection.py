@@ -1,10 +1,11 @@
-"""YOLO detection + tracking, EPP-to-person association, fall detection with pose, and face blurring."""
+"""YOLO detection + tracking (one or two stages), EPP-to-person association, fall detection with pose, and face blurring."""
 import math
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
 
+from .crops import belongs_to, crop_region, to_frame_box
 from .geometry import Box, center, contains, iou
 from .rules import ObjectObs, PersonObs
 
@@ -45,38 +46,93 @@ def torso_angle(keypoints: np.ndarray) -> float | None:
     return math.degrees(math.atan2(abs(dx), abs(dy) + 1e-9))
 
 
+RawPerson = tuple[int, Box, float]          # track id, normalized box, confidence
+EppBox = tuple[str, Box, float]             # label, normalized box, confidence
+
+
+def _boxes(result) -> list[tuple[str, Box, float, int | None]]:
+    """(label, normalized x-y-w-h box, confidence, track id) of an Ultralytics result."""
+    if result.boxes is None or not len(result.boxes):
+        return []
+    ids = result.boxes.id.int().tolist() if result.boxes.id is not None else [None] * len(result.boxes)
+    return [(result.names[cls], (xyxy[0], xyxy[1], xyxy[2] - xyxy[0], xyxy[3] - xyxy[1]), conf, track_id)
+            for cls, conf, xyxy, track_id in zip(result.boxes.cls.int().tolist(), result.boxes.conf.tolist(),
+                                                 result.boxes.xyxyn.tolist(), ids)]
+
+
+class SingleStage:
+    """One model finds persons and EPP in the whole frame (reduced to imgsz); EPP goes to the person that contains it."""
+
+    def __init__(self, model, person_class: str, epp_classes: frozenset[str], device, imgsz: int, conf: float):
+        self.model, self.person_class, self.epp_classes = model, person_class, epp_classes
+        self.device, self.imgsz, self.conf = device, imgsz, conf
+
+    def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
+        result = self.model.track(frame, persist=True, conf=self.conf, imgsz=self.imgsz, device=self.device,
+                                  tracker="bytetrack.yaml", verbose=False)[0]
+        persons, epp_boxes = [], []
+        for label, box, conf, track_id in _boxes(result):
+            if label == self.person_class and track_id is not None:
+                persons.append((track_id, box, conf))
+            elif label in self.epp_classes:
+                epp_boxes.append((label, box, conf))
+        return persons, associate_epp(persons, epp_boxes), epp_boxes
+
+
+class TwoStage:
+    """Persons with a general model and tracking; then EPP in each person's crop, taken from the full-resolution frame.
+
+    Small or distant workers keep their pixels for the EPP model, instead of being reduced with the whole frame.
+    """
+
+    def __init__(self, person_model, epp_model, person_classes: frozenset[str], epp_classes: frozenset[str], device,
+                 person_imgsz: int, person_conf: float, epp_imgsz: int, epp_conf: float, margin: float):
+        self.person_model, self.epp_model = person_model, epp_model
+        self.epp_classes, self.device = epp_classes, device
+        self.person_imgsz, self.person_conf = person_imgsz, person_conf
+        self.epp_imgsz, self.epp_conf, self.margin = epp_imgsz, epp_conf, margin
+        # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
+        self.person_ids = [i for i, name in person_model.names.items() if name in person_classes]
+
+    def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
+        result = self.person_model.track(frame, persist=True, conf=self.person_conf, imgsz=self.person_imgsz,
+                                         classes=self.person_ids, device=self.device, tracker="bytetrack.yaml", verbose=False)[0]
+        persons = [(track_id, box, conf) for _, box, conf, track_id in _boxes(result) if track_id is not None]
+        epp: dict[int, set[str]] = {track_id: set() for track_id, _, _ in persons}
+        h, w = frame.shape[:2]
+        crops = [(track_id, box, region) for track_id, box, _ in persons
+                 if (region := crop_region(box, w, h, self.margin)) is not None]
+        if not crops:
+            return persons, epp, []
+        # A single batch for all the persons of the frame.
+        results = self.epp_model.predict([frame[y1:y2, x1:x2] for _, _, (x1, y1, x2, y2) in crops], conf=self.epp_conf,
+                                         imgsz=self.epp_imgsz, device=self.device, verbose=False)
+        epp_boxes = []
+        for (track_id, person_box, region), crop_result in zip(crops, results):
+            if crop_result.boxes is None:
+                continue
+            for cls, conf, xyxy in zip(crop_result.boxes.cls.int().tolist(), crop_result.boxes.conf.tolist(),
+                                       crop_result.boxes.xyxy.tolist()):
+                label = crop_result.names[cls]
+                if label not in self.epp_classes:
+                    continue
+                box = to_frame_box(tuple(xyxy), region, w, h)
+                if belongs_to(person_box, box):
+                    epp[track_id].add(label)
+                    epp_boxes.append((label, box, conf))
+        return persons, epp, epp_boxes
+
+
 class Detector:
     """One instance per camera: Ultralytics trackers keep state per model instance."""
 
-    def __init__(self, model_path: str, pose_model_path: str | None, object_model_path: str | None,
-                 person_class: str, epp_classes: frozenset[str], device, imgsz: int, conf: float):
-        from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
-
-        self.model = YOLO(model_path)
-        self.pose = YOLO(pose_model_path) if pose_model_path else None
-        self.objects = YOLO(object_model_path) if object_model_path else None
-        self.person_class, self.epp_classes = person_class, epp_classes
-        self.device, self.imgsz, self.conf = device, imgsz, conf
-        self.model_version = model_path.replace("\\", "/").split("/")[-3] if model_path.count("/") + model_path.count("\\") >= 2 else model_path
+    def __init__(self, stage: SingleStage | TwoStage, pose_model=None, object_model=None, device=None, imgsz: int = 640):
+        self.stage, self.pose, self.objects = stage, pose_model, object_model
+        self.device, self.imgsz = device, imgsz
 
     def detect(self, frame: np.ndarray, detect_objects: bool) -> Detections:
         h, w = frame.shape[:2]
-        result = self.model.track(frame, persist=True, conf=self.conf, imgsz=self.imgsz, device=self.device,
-                                  tracker="bytetrack.yaml", verbose=False)[0]
-        names = result.names
-        raw_persons, epp_boxes = [], []
-        if result.boxes is not None and len(result.boxes):
-            ids = result.boxes.id.int().tolist() if result.boxes.id is not None else [None] * len(result.boxes)
-            for cls, conf, xyxy, track_id in zip(result.boxes.cls.int().tolist(), result.boxes.conf.tolist(),
-                                                 result.boxes.xyxyn.tolist(), ids):
-                box = (xyxy[0], xyxy[1], xyxy[2] - xyxy[0], xyxy[3] - xyxy[1])
-                label = names[cls]
-                if label == self.person_class and track_id is not None:
-                    raw_persons.append((track_id, box, conf))
-                elif label in self.epp_classes:
-                    epp_boxes.append((label, box, conf))
-
-        epp = associate_epp(raw_persons, epp_boxes)
+        raw_persons, epp, epp_boxes = self.stage.run(frame)
         lying = [p for p in raw_persons if p[1][2] * w > FALL_ASPECT * p[1][3] * h]
         keypoints = self._pose(frame) if lying and self.pose else []
         persons = [PersonObs(t, box, round(conf, 3), frozenset(epp[t]), self._is_fallen(box, keypoints, w, h) if (t, box, conf) in lying else False)
@@ -116,6 +172,26 @@ class Detector:
 
     def face_keypoints(self, frame: np.ndarray) -> list[tuple[Box, np.ndarray]]:
         return self._pose(frame) if self.pose else []
+
+
+DETECTION_MODES = ("two_stage", "single")
+COCO_PERSON = "person"
+
+
+def create_detector(settings, person_class: str, epp_classes: frozenset[str], with_objects: bool) -> Detector:
+    """Loads the models of one camera according to the node settings (DETECTION_MODE)."""
+    from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
+
+    device = settings.torch_device
+    epp_model = YOLO(settings.model_path)
+    if settings.detection_mode == "single":
+        stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
+    else:
+        stage = TwoStage(YOLO(settings.person_model), epp_model, frozenset({person_class, COCO_PERSON}), epp_classes, device,
+                         settings.imgsz, settings.person_conf, settings.epp_imgsz, settings.conf, settings.epp_crop_margin)
+    pose = YOLO(settings.pose_model) if settings.pose_model else None
+    objects = YOLO(settings.object_model) if with_objects and settings.object_model else None
+    return Detector(stage, pose, objects, device, settings.imgsz)
 
 
 PIXELATION_BLOCKS = 6       # a face region is reduced to about 6x6 blocks: not recognizable

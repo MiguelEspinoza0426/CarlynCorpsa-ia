@@ -5,7 +5,7 @@ import time
 
 from .api_client import Outbox, event_payload, iso
 from .config import CameraConfig, NodeConfig
-from .detection import Detector, blur_faces
+from .detection import Detector, blur_faces, create_detector
 from .drawing import draw_event, encode_jpeg
 from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
@@ -66,9 +66,7 @@ class CameraWorker(threading.Thread):
 
     def run(self) -> None:
         try:
-            self.detector = Detector(self.settings.model_path, self.settings.pose_model or None, self.settings.object_model or None,
-                                     self.node.person_class, self.node.epp_classes, self.settings.torch_device,
-                                     self.settings.imgsz, self.settings.conf)
+            self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True)
             self.reader = open_source(self.source, self.camera.name)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat
             self.error = f"No se pudo iniciar: {ex}"

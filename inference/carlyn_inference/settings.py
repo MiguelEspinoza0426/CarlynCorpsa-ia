@@ -17,6 +17,12 @@ class Settings:
     ingest_api_key: str = ""
     internal_key: str = ""
     model_path: str = str(REPO / "ml/runs/epp_v3_completo/weights/best.pt")
+    # two_stage: persons with PERSON_MODEL, then EPP on each person's crop at full resolution; single: MODEL_PATH alone.
+    detection_mode: str = "two_stage"
+    person_model: str = "yolo11s.pt"
+    person_conf: float = 0.3
+    epp_imgsz: int = 640
+    epp_crop_margin: float = 0.15
     pose_model: str = "yolo11n-pose.pt"
     object_model: str = ""
     device: str = "auto"
@@ -57,6 +63,11 @@ class Settings:
             ingest_api_key=env("INGEST_API_KEY", ""),
             internal_key=env("INTERNAL_KEY", ""),
             model_path=env("MODEL_PATH", defaults.model_path),
+            detection_mode=env("DETECTION_MODE", defaults.detection_mode).strip().lower(),
+            person_model=env("PERSON_MODEL", defaults.person_model),
+            person_conf=float(env("PERSON_CONF", defaults.person_conf)),
+            epp_imgsz=int(env("EPP_IMGSZ", defaults.epp_imgsz)),
+            epp_crop_margin=float(env("EPP_CROP_MARGIN", defaults.epp_crop_margin)),
             pose_model=env("POSE_MODEL", defaults.pose_model),
             object_model=env("OBJECT_MODEL", defaults.object_model),
             device=env("DEVICE", defaults.device),

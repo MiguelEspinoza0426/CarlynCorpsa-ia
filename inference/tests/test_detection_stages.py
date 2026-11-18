@@ -1,0 +1,117 @@
+"""Detection stages with fake models: no torch or weights needed."""
+import numpy as np
+import pytest
+
+from carlyn_inference.detection import Detector, SingleStage, TwoStage
+
+
+class _List(list):
+    def tolist(self):
+        return list(self)
+
+    def int(self):
+        return self
+
+
+class _Boxes:
+    def __init__(self, rows, size, ids=None):
+        # rows: (class index, confidence, x1, y1, x2, y2 in pixels of an image of `size` = (w, h))
+        w, h = size
+        self.cls = _List(r[0] for r in rows)
+        self.conf = _List(r[1] for r in rows)
+        self.xyxy = _List(list(r[2:]) for r in rows)
+        self.xyxyn = _List([r[2] / w, r[3] / h, r[4] / w, r[5] / h] for r in rows)
+        self.id = _List(ids) if ids is not None else None
+
+    def __len__(self):
+        return len(self.cls)
+
+
+class _Result:
+    def __init__(self, names, boxes):
+        self.names, self.boxes = names, boxes
+
+
+class _PersonModel:
+    names = {0: "person", 2: "car"}
+
+    def __init__(self, rows, ids):
+        self.rows, self.ids, self.calls = rows, ids, []
+
+    def track(self, frame, **kwargs):
+        self.calls.append(kwargs)
+        h, w = frame.shape[:2]
+        return [_Result(self.names, _Boxes(self.rows, (w, h), self.ids))]
+
+
+class _EppModel:
+    names = {0: "casco", 1: "mandil", 2: "persona"}
+
+    def __init__(self, rows_per_crop):
+        self.rows_per_crop, self.crops = rows_per_crop, []
+
+    def predict(self, crops, **kwargs):
+        self.crops = crops
+        return [_Result(self.names, _Boxes(rows, (c.shape[1], c.shape[0]))) for c, rows in zip(crops, self.rows_per_crop)]
+
+
+FRAME = np.zeros((1000, 2000, 3), dtype=np.uint8)
+EPP = frozenset({"casco", "mandil"})
+
+
+def _two_stage(person_rows, ids, epp_rows):
+    persons, epp = _PersonModel(person_rows, ids), _EppModel(epp_rows)
+    return TwoStage(persons, epp, frozenset({"persona", "person"}), EPP, "cpu", 640, 0.3, 320, 0.25, 0.15), persons, epp
+
+
+def test_two_stage_finds_epp_in_full_resolution_crops():
+    # Person of 100x300 px at (1000, 500); its crop with 15 % margin starts at (985, 455).
+    stage, persons, epp = _two_stage([(0, 0.8, 1000, 500, 1100, 800)], [7],
+                                     [[(1, 0.6, 30, 150, 110, 250), (2, 0.9, 0, 0, 130, 390)]])
+    raw, assigned, boxes = stage.run(FRAME)
+
+    assert [t for t, _, _ in raw] == [7]
+    assert assigned == {7: {"mandil"}}                 # "persona" inside the crop is not EPP
+    assert epp.crops[0].shape[:2] == (390, 130)        # crop taken from the full frame, not from the 640 px input
+    label, box, _ = boxes[0]
+    assert label == "mandil"
+    assert box == pytest.approx(((985 + 30) / 2000, (455 + 150) / 1000, 80 / 2000, 100 / 1000))
+    assert persons.calls[0]["classes"] == [0]          # only "person" goes through NMS and the tracker
+
+
+def test_two_stage_ignores_epp_of_a_neighbour_seen_in_the_margin():
+    # EPP at the left edge of the crop: it belongs to someone standing next to the person.
+    stage, _, _ = _two_stage([(0, 0.8, 1000, 500, 1100, 800)], [7], [[(0, 0.7, 0, 100, 4, 120)]])
+    _, assigned, boxes = stage.run(FRAME)
+    assert assigned == {7: set()}
+    assert boxes == []
+
+
+def test_two_stage_skips_untracked_and_tiny_persons():
+    stage, _, epp = _two_stage([(0, 0.8, 1000, 500, 1100, 800), (0, 0.5, 10, 10, 15, 20)], [None, 3], [[]])
+    raw, assigned, _ = stage.run(FRAME)
+    assert [t for t, _, _ in raw] == [3]
+    assert assigned == {3: set()}
+    assert epp.crops == []                             # 5x10 px: no crop worth analyzing
+
+
+class _SingleModel:
+    names = {0: "persona", 1: "casco"}
+
+    def track(self, frame, **kwargs):
+        h, w = frame.shape[:2]
+        return [_Result(self.names, _Boxes([(0, 0.9, 1000, 500, 1100, 800), (1, 0.7, 1030, 500, 1070, 540)], (w, h), [4, 5]))]
+
+
+def test_single_stage_keeps_the_previous_behaviour():
+    raw, assigned, boxes = SingleStage(_SingleModel(), "persona", EPP, "cpu", 640, 0.25).run(FRAME)
+    assert [t for t, _, _ in raw] == [4]
+    assert assigned == {4: {"casco"}}
+    assert [b[0] for b in boxes] == ["casco"]
+
+
+def test_detector_builds_person_observations_from_any_stage():
+    stage, _, _ = _two_stage([(0, 0.81234, 1000, 500, 1100, 800)], [7], [[(1, 0.6, 30, 150, 110, 250)]])
+    detections = Detector(stage).detect(FRAME, detect_objects=False)
+    person = detections.persons[0]
+    assert (person.track_id, person.confidence, person.epp, person.fallen) == (7, 0.812, frozenset({"mandil"}), False)

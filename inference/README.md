@@ -142,9 +142,9 @@ Mide el mismo pipeline del servicio (detección + tracking, pose, pixelado y cod
 
 ```bash
 # Video o carpeta de imágenes
-C:envs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base offline --source C:/ruta/video.mp4 --resize 1280x720
+C:\venvs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base offline --source C:/ruta/video.mp4 --resize 1280x720
 # Cámaras reales del nodo (detenga antes el servicio; no envía nada a la API)
-C:envs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base live --seconds 120
+C:\venvs\carlyn\Scripts\python -m carlyn_inference.benchmark --label linea-base live --seconds 120
 ```
 
 En la GTX 1650 de la empresa conviene un modelo YOLO11s (`ml/training/train.py --modelo yolo11s.pt`) y 3–5 FPS por cámara.

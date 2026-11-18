@@ -7,6 +7,7 @@ from .api_client import Outbox, event_payload, iso
 from .config import CameraConfig, InferenceConfig, NodeConfig
 from .detection import Detector, blur_faces, create_detector
 from .drawing import draw_event, encode_jpeg
+from .gpu import GPU
 from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
 from .settings import Settings
@@ -15,8 +16,6 @@ from .sources.signal import SignalMonitor
 
 log = logging.getLogger(__name__)
 
-# Single GPU: inferences of all cameras are serialized, which is more predictable than running them concurrently.
-GPU_LOCK = threading.Lock()
 
 
 class CameraWorker(threading.Thread):
@@ -124,12 +123,12 @@ class CameraWorker(threading.Thread):
         with self._engine_lock:
             camera, engine = self.camera, self.engine
         detect_objects = any(z.rule("UnsafeCondition") for z in camera.zones)
-        with GPU_LOCK:
+        with GPU.turn(self.camera.id, self.camera.target_fps):
             detections = self.detector.detect(frame, detect_objects)
         events = engine.update(now, detections.persons, detections.objects)
 
         if events:
-            with GPU_LOCK:
+            with GPU.turn(self.camera.id, self.camera.target_fps):
                 keypoints = self.detector.face_keypoints(frame)
             for event in events:
                 snapshot = blur_faces(draw_event(frame, event), detections.persons, keypoints)
@@ -159,7 +158,7 @@ class CameraWorker(threading.Thread):
             return None
         keypoints = []
         if self.detector is not None:
-            with GPU_LOCK:
+            with GPU.turn(self.camera.id, self.camera.target_fps):
                 keypoints = self.detector.face_keypoints(frame)
         return encode_jpeg(blur_faces(frame, persons, keypoints), 90)
 

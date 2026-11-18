@@ -7,6 +7,7 @@ import httpx
 from . import config as config_module
 from .api_client import ApiClient, Outbox
 from .config import NodeConfig
+from .gpu import GPU
 from .settings import Settings
 from .worker import CameraWorker
 
@@ -77,6 +78,7 @@ class InferenceService:
                 if camera_id not in wanted:
                     log.info("Stopping camera %s (removed or disabled)", self.workers[camera_id].camera.name)
                     self.workers.pop(camera_id).stop()
+                    GPU.forget(camera_id)
             for camera in node.cameras:
                 worker = self.workers.get(camera.id)
                 # The source, the rate and the inference block are fixed when a worker starts: changing them restarts it.

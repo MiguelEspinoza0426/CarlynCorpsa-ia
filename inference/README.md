@@ -89,6 +89,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `MIN_PERSON_HEIGHT_PX` | Altura mínima (px de la imagen original) para evaluar el EPP de una persona. Las más pequeñas se cuentan y siguen, pero la regla de EPP las ignora | `150` |
 | `TRACK_BUFFER_SEC` | Segundos que una persona que deja de verse (columna, camión, contraluz) conserva su ID de seguimiento. También es el tiempo tras el cual el motor de reglas cierra su permanencia | `4` |
 | `DECODE_HW` | Decodificación del video RTSP o de archivo: `auto` usa el decodificador de la GPU (NVDEC, por D3D11VA en Windows) si está disponible y si no la CPU; `off` fuerza la CPU | `auto` |
+| `MAX_BATCH` | Imágenes por llamada a la GPU (mosaicos SAHI, recortes de personas). No puede superar el batch con el que se exportaron los motores TensorRT | `8` |
 | `NO_SIGNAL_SEC` | Segundos de imagen negra, uniforme o con el logo del DVR antes de reportar la cámara sin señal (imagen congelada: 30 s). Mientras tanto no se analiza | `5` |
 | `NO_SIGNAL_STATUS` | Estado que se envía en el heartbeat para una cámara sin señal; el motivo va en `error`. Cambiará a `NoSignal` cuando la API lo admita | `Offline` |
 | `EPP_IMGSZ`, `EPP_CROP_MARGIN` | Tamaño de inferencia de los recortes de EPP y margen alrededor de cada persona | `640`, `0.15` |
@@ -144,6 +145,17 @@ La «Cámara USB» y la «Ventana» siempre son del **equipo donde corre este se
 ```powershell
 $env:SOURCE_OVERRIDES = '{"Soldadura - Nave 1": "C:/ruta/video.mp4"}'
 ```
+
+## TensorRT (HU-35)
+
+En la PC de inferencia, con las mismas variables de entorno que el servicio:
+
+```powershell
+pip install "tensorrt-cu12>=10.8,<12"
+C:\venvs\carlyn\Scripts\python -m carlyn_inference.export
+```
+
+Genera motores FP16 con batch dinámico (`*_fp16_640_b8.engine`) junto a cada modelo, e imprime los valores de `PERSON_MODEL`, `MODEL_PATH`, `POSE_MODEL` y `MAX_BATCH` para el servicio. Un motor solo funciona en la GPU y la versión de TensorRT que lo generaron. En la RTX 5070, el pipeline procesa un 58 % más de cuadros que con los `.pt` (ver `docs/benchmarks`).
 
 ## Benchmark del equipo (HU-35)
 

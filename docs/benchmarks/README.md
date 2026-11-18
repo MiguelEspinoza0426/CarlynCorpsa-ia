@@ -64,6 +64,31 @@ Mismo video escalado a 1920×1080 en la RTX 5070:
 - **Límite de esta medición:** el video tiene 848×480 de origen. Al escalarlo no aparecen personas lejanas nuevas, así que no mide la ganancia real en el fondo de Camara 1. Eso queda para el modo `live` en la PC de la empresa con `SLICE_OVERRIDES`, y para el recall por distancia del paso 8.
 - **Fusión:** una primera versión unía también cajas contenidas una en otra aunque no las hubiera cortado un mosaico. Eso juntaba a dos personas, una delante de la otra (2,28 personas por cuadro contra 2,48 de Ultralytics). Ahora solo se unen las cajas cortadas por el borde de un mosaico.
 
+## Grabaciones reales de Camara 1 (17/11/2026)
+
+Hay dos grabaciones de la cámara en `videos/` (no versionadas): 960×480, 12 fps, comprimidas por WhatsApp. Se midieron 1200 cuadros seguidos de cada una (100 s), en la RTX 5070.
+
+- **A (17:45–17:54):** dos o tres personas trabajan al fondo de la nave, junto a los cilindros rojos. Miden 30–60 px y las tapan el banco y la columna.
+- **B (17:53–17:57):** una persona trabaja junto a la columna, casi oculta.
+
+| Configuración | A: personas por cuadro | A: menores de 60 px | B: personas por cuadro | Detección + tracking A (media / p95) | Cuadros/s A |
+|---|---|---|---|---|---|
+| [1. Una etapa (anterior)](2026-11-17_2133_cam1-a-1-una-etapa_desktop-gl450ej.md) | 0,05 | 0 | 0,00 | 16,9 / 26,3 ms | 29,8 |
+| [2. Dos etapas](2026-11-17_2134_cam1-a-2-dos-etapas_desktop-gl450ej.md) | 0,62 | 56 | 0,21 | 24,1 / 46,3 ms | 24,3 |
+| [3. + SAHI, mosaicos de 640](2026-11-17_2135_cam1-a-3-sahi-640_desktop-gl450ej.md) | 0,72 | 128 | 0,16 | 28,4 / 50,4 ms | 22,3 |
+| [4. + SAHI, mosaicos de 320 ampliados a 640](2026-11-17_2137_cam1-a-4-sahi-320_desktop-gl450ej.md) | **0,79** | **199** | 0,15 | 33,6 / 54,6 ms | 19,9 |
+
+SAHI con ROI `[0, 0.06, 1, 0.5]`: el fondo de la nave, sin la franja de la fecha que imprime el DVR.
+
+- **Hallazgo 1 confirmado:** con el modelo anterior, la cámara prácticamente no ve personas (0,05 por cuadro en A, 0 en B). `epp_v3_completo` no generaliza a personas lejanas y parcialmente ocultas.
+- **Dos etapas:** YOLO11s (COCO) multiplica por 12 las personas detectadas en A.
+- **SAHI:** suma un 16–27 % en A, sobre todo personas de menos de 60 px (56 → 199). Los mosaicos de 320 ampliados a 640 equivalen a mosaicos de 640 sobre el main stream de doble resolución. En B no suma: la persona no está lejos sino oculta tras la columna.
+- **Falsos positivos:** con confianza baja aparecían cajas diminutas y detecciones sobre la fecha del DVR. Por eso:
+  - SAHI descarta cajas de menos de 16 px;
+  - la ROI excluye la franja superior;
+  - `PERSON_CONF` es 0,2: ByteTrack solo inicia un track desde 0,25, y las detecciones más débiles solo mantienen tracks existentes.
+- **EPP:** ninguna persona de estas grabaciones llega a 150 px de alto, así que el EPP casi no se reconoce (≤1 %). Con 960×480 esto es esperable; el paso 3 debe fijar `minPersonHeightPx` según la resolución real del main stream.
+
 ### Medida en producción (PC de la empresa, GTX 1650)
 
 Datos reportados desde la plataforma (heartbeat) el 16–17/11/2026:

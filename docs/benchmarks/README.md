@@ -48,6 +48,22 @@ La primera etapa detecta personas con YOLO11s (COCO) y ByteTrack. La segunda cor
 - **EPP:** el porcentaje de personas con algún EPP sube de 3 % a 22 %, porque el modelo ve a cada persona con más píxeles. A 320 px rinde menos: el modelo se entrenó a 640.
 - **Costo:** la detección pasa de ~23 a ~47 ms por cuadro (dos modelos). En la GTX 1650 esto pesa más; lo compensan los pasos 3 (no evaluar EPP en personas pequeñas) y 5 (TensorRT FP16). `DETECTION_MODE=single` vuelve al modo anterior.
 
+## Paso 2: SAHI por cámara
+
+La primera etapa analiza en un solo batch el cuadro completo y mosaicos de 640 px con 20 % de solape, solo dentro de la ROI de la cámara. Las detecciones se fusionan con NMS; una persona cortada por el borde de un mosaico se une con su caja completa. Después pasan por ByteTrack (el de Ultralytics, con los mismos parámetros).
+
+Mismo video escalado a 1920×1080 en la RTX 5070:
+
+| Medición | Detección + tracking (media / p95) | Cuadros/s del pipeline | Personas por cuadro | Personas por altura (<60 / 60–150 / ≥150 px) | Personas con algún EPP |
+|---|---|---|---|---|---|
+| [dos etapas, sin SAHI](2026-11-17_2111_dos-etapas-video-1920_desktop-gl450ej.md) | 48,9 / 81,4 ms | 13,4 | 2,5 | 0 / 26 / 246 | 21 % |
+| [SAHI en la franja superior (30 %)](2026-11-17_2114_sahi-roi30-video-1920_desktop-gl450ej.md) | 53,1 / 79,2 ms | 13,5 | 2,41 | 1 / 23 / 239 | 22 % |
+| [SAHI en todo el cuadro](2026-11-17_2114_sahi-completo-video-1920_desktop-gl450ej.md) | 67,9 / 94,4 ms | 10,9 | 3,09 | 5 / 46 / 286 | 19 % |
+
+- **Costo:** SAHI limitado a una franja como «Fondo nave» suma ~4 ms, porque los mosaicos van en el mismo batch. En todo el cuadro suma ~19 ms.
+- **Límite de esta medición:** el video tiene 848×480 de origen. Al escalarlo no aparecen personas lejanas nuevas, así que no mide la ganancia real en el fondo de Camara 1. Eso queda para el modo `live` en la PC de la empresa con `SLICE_OVERRIDES`, y para el recall por distancia del paso 8.
+- **Fusión:** una primera versión unía también cajas contenidas una en otra aunque no las hubiera cortado un mosaico. Eso juntaba a dos personas, una delante de la otra (2,28 personas por cuadro contra 2,48 de Ultralytics). Ahora solo se unen las cajas cortadas por el borde de un mosaico.
+
 ### Medida en producción (PC de la empresa, GTX 1650)
 
 Datos reportados desde la plataforma (heartbeat) el 16–17/11/2026:

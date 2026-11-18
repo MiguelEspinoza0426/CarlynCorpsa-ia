@@ -88,7 +88,7 @@ class InferenceService:
                     worker = self.workers[camera.id] = self.worker_factory(camera, node, self.settings, self.outbox)
                     worker.start()
                 else:
-                    worker.update_camera(camera)
+                    worker.update_camera(camera, node)
 
     # ---- heartbeat and queries ----
 

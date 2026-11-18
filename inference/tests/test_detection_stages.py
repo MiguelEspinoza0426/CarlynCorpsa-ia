@@ -81,6 +81,15 @@ def test_two_stage_finds_epp_in_full_resolution_crops():
     assert persons.calls[0]["classes"] == [0]          # only "person" goes through NMS and the tracker
 
 
+def test_two_stage_applies_the_minimum_confidence_of_each_class():
+    stage, _, _ = _two_stage([(0, 0.8, 1000, 500, 1100, 800)], [7],
+                             [[(1, 0.6, 30, 150, 110, 250), (0, 0.4, 40, 20, 90, 60)]])
+    detector = Detector(stage)
+    detector.set_epp_min_confidence({"casco": 0.5})
+    _, assigned, _ = stage.run(FRAME)
+    assert assigned == {7: {"mandil"}}                 # casco at 0.4 is below its 0.5 minimum; mandil keeps CONF
+
+
 def test_two_stage_ignores_epp_of_a_neighbour_seen_in_the_margin():
     # EPP at the left edge of the crop: it belongs to someone standing next to the person.
     stage, _, _ = _two_stage([(0, 0.8, 1000, 500, 1100, 800)], [7], [[(0, 0.7, 0, 100, 4, 120)]])

@@ -59,11 +59,15 @@ class CameraWorker(threading.Thread):
             return "Reconnecting"
         return "Online"
 
-    def update_camera(self, camera: CameraConfig) -> None:
+    def update_camera(self, camera: CameraConfig, node: NodeConfig | None = None) -> None:
         """New zones or rules: the rules engine restarts (temporary track state is discarded)."""
         with self._engine_lock:
             self.camera = camera
             self.engine = RuleEngine(camera)
+        if node is not None:
+            self.node = node
+            if self.detector is not None:
+                self.detector.set_epp_min_confidence(node.epp_min_confidence)
 
     def stop(self) -> None:
         self._running = False
@@ -75,6 +79,7 @@ class CameraWorker(threading.Thread):
         try:
             self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
                                             slicing=self.slicing)
+            self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
             self.reader = open_source(self.source, self.camera.name)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat
             self.error = f"No se pudo iniciar: {ex}"

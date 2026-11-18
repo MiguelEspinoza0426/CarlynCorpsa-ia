@@ -69,6 +69,13 @@ def test_config_is_parsed():
     assert zone.required_epp == {"guantes"} and zone.rule("EppMissing").min_duration_sec == 3
     assert zone.threshold("MaxOccupancy").critical == 4
     assert not node.cameras[0].slicing.enabled          # no inference block: SAHI off
+    assert node.epp_min_confidence == {}
+
+
+def test_epp_min_confidence_is_parsed():
+    data = json.loads(json.dumps(CONFIG))
+    data["model"]["eppMinConfidence"] = {"guantes": 0.5, "careta_soldar": 0.35}
+    assert config_module.parse(data).epp_min_confidence == {"guantes": 0.5, "careta_soldar": 0.35}
 
 
 def test_camera_slicing_is_parsed():
@@ -168,8 +175,8 @@ class FakeWorker:
     def stop(self):
         self.stopped = True
 
-    def update_camera(self, camera):
-        self.camera, self.updated = camera, self.updated + 1
+    def update_camera(self, camera, node=None):
+        self.camera, self.updated, self.node = camera, self.updated + 1, node
 
     def snapshot_jpeg(self):
         return b"\xff\xd8raw"
@@ -191,6 +198,7 @@ def test_service_starts_restarts_and_stops_workers():
     same_source = config_module.parse({**CONFIG, "version": "v2"})
     service.apply(same_source)
     assert service.workers["cam-1"] is worker and worker.updated == 1
+    assert worker.node.version == "v2"                  # new class thresholds reach the running worker
 
     moved = json.loads(json.dumps(CONFIG))
     moved["cameras"][0]["streamUrl"] = "rtsp://192.168.100.14:554/Streaming/Channels/202"

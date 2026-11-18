@@ -31,7 +31,8 @@
 {
   "version": "3f9a1c0d2b7e4a51",
   "nodeId": "gpu-01",
-  "model": { "eppClasses": ["calzado","careta_soldar","guantes","lentes","mandil","protector_facial","traje"], "personClass": "persona" },
+  "model": { "eppClasses": ["calzado","careta_soldar","guantes","lentes","mandil","protector_facial","traje"], "personClass": "persona",
+             "eppMinConfidence": { "guantes": 0.45, "careta_soldar": 0.35 } },
   "cameras": [
     {
       "id": "01a1...", "name": "Soldadura - Nave 1",
@@ -58,6 +59,7 @@
 }
 ```
 - Solo incluye cámaras, zonas y reglas **activas**.
+- `model.eppMinConfidence` (opcional): confianza mínima por clase de EPP (`EppClass.MinConfidence`). Las clases que no aparecen usan la confianza general del nodo (`CONF`). Se aplica desde el siguiente cuadro, sin reiniciar la cámara.
 - `version` es un hash del contenido: cambia con cualquier cambio de configuración, incluidas las eliminaciones.
 - Los parámetros numéricos de las reglas vienen en `thresholds`: `MaxOccupancy`, `MaxDwellSeconds`, `InactivitySeconds` y `ProximityDistance` (fracción del ancho de la imagen).
 - Las credenciales de las cámaras **no** viajan: el nodo las lee de `CAM_DVR1_USER` y `CAM_DVR1_PASS`.

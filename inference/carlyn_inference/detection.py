@@ -47,6 +47,11 @@ def torso_angle(keypoints: np.ndarray) -> float | None:
     return math.degrees(math.atan2(abs(dx), abs(dy) + 1e-9))
 
 
+def epp_passes(label: str, conf: float, minimums: dict[str, float]) -> bool:
+    """Per-class minimum confidence (EppClass.MinConfidence in the platform); the model's own threshold already applied."""
+    return conf >= minimums.get(label, 0.0)
+
+
 RawPerson = tuple[int, Box, float]          # track id, normalized box, confidence
 EppBox = tuple[str, Box, float]             # label, normalized box, confidence
 
@@ -67,6 +72,7 @@ class SingleStage:
     def __init__(self, model, person_class: str, epp_classes: frozenset[str], device, imgsz: int, conf: float):
         self.model, self.person_class, self.epp_classes = model, person_class, epp_classes
         self.device, self.imgsz, self.conf = device, imgsz, conf
+        self.epp_min_confidence: dict[str, float] = {}
 
     def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
         result = self.model.track(frame, persist=True, conf=self.conf, imgsz=self.imgsz, device=self.device,
@@ -75,7 +81,7 @@ class SingleStage:
         for label, box, conf, track_id in _boxes(result):
             if label == self.person_class and track_id is not None:
                 persons.append((track_id, box, conf))
-            elif label in self.epp_classes:
+            elif label in self.epp_classes and epp_passes(label, conf, self.epp_min_confidence):
                 epp_boxes.append((label, box, conf))
         return persons, associate_epp(persons, epp_boxes), epp_boxes
 
@@ -147,6 +153,7 @@ class TwoStage:
         self.epp_classes, self.device = epp_classes, device
         self.epp_imgsz, self.epp_conf, self.margin = epp_imgsz, epp_conf, margin
         self.min_height_px = min_height_px
+        self.epp_min_confidence: dict[str, float] = {}
 
     def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
         persons = self.persons.track(frame)
@@ -167,7 +174,7 @@ class TwoStage:
             for cls, conf, xyxy in zip(crop_result.boxes.cls.int().tolist(), crop_result.boxes.conf.tolist(),
                                        crop_result.boxes.xyxy.tolist()):
                 label = crop_result.names[cls]
-                if label not in self.epp_classes:
+                if label not in self.epp_classes or not epp_passes(label, conf, self.epp_min_confidence):
                     continue
                 box = to_frame_box(tuple(xyxy), region, w, h)
                 if belongs_to(person_box, box):
@@ -184,6 +191,10 @@ class Detector:
         self.stage, self.pose, self.objects = stage, pose_model, object_model
         self.device, self.imgsz = device, imgsz
         self.min_person_height_px = min_person_height_px
+
+    def set_epp_min_confidence(self, minimums: dict[str, float]) -> None:
+        """Applied from the next frame on: changing a class threshold in the platform needs no restart."""
+        self.stage.epp_min_confidence = dict(minimums)
 
     def detect(self, frame: np.ndarray, detect_objects: bool) -> Detections:
         h, w = frame.shape[:2]

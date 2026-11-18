@@ -64,6 +64,8 @@ class NodeConfig:
     epp_classes: frozenset[str]
     person_class: str
     cameras: list[CameraConfig]
+    # Minimum confidence per EPP class; classes not listed use CONF.
+    epp_min_confidence: dict[str, float] = field(default_factory=dict)
 
 
 def parse(data: dict) -> NodeConfig:
@@ -83,6 +85,7 @@ def parse(data: dict) -> NodeConfig:
         version=data["version"],
         node_id=data["nodeId"],
         epp_classes=frozenset(data["model"]["eppClasses"]),
+        epp_min_confidence={k: float(v) for k, v in (data["model"].get("eppMinConfidence") or {}).items()},
         person_class=data["model"]["personClass"],
         cameras=[CameraConfig(c["id"], c["name"], c["streamUrl"], c.get("credentialsRef"), c["targetFps"],
                               [zone(z) for z in c.get("zones", [])], c.get("blurFaces", True),

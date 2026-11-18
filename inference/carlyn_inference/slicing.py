@@ -19,7 +19,8 @@ class SliceConfig:
     roi: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0)  # normalized x1, y1, x2, y2
     full_frame: bool = True
     iou: float = 0.5
-    min_box_px: int = 8
+    # Smaller boxes in tiles are mostly clutter or the DVR's on-screen date; distant workers measure 30-60 px.
+    min_box_px: int = 16
 
     @staticmethod
     def parse(data: dict | None) -> "SliceConfig":

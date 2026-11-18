@@ -101,8 +101,9 @@ class SlicedPersons:
     keep their pixels.
     """
 
-    def __init__(self, model, person_classes: frozenset[str], device, conf: float, config: SliceConfig, tracker=None):
-        self.model, self.device, self.conf, self.config = model, device, conf, config
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, config: SliceConfig, tracker=None):
+        # Every region is inferred at imgsz: tiles smaller than imgsz are enlarged (320 px tiles at 640 = 2x zoom).
+        self.model, self.device, self.imgsz, self.conf, self.config = model, device, imgsz, conf, config
         self.classes = [i for i, name in model.names.items() if name in person_classes]
         self.half = device != "cpu"
         self.tracker = tracker or _byte_tracker()
@@ -112,7 +113,7 @@ class SlicedPersons:
 
         h, w = frame.shape[:2]
         regions = tile_regions(w, h, self.config)
-        results = self.model.predict([frame[y1:y2, x1:x2] for x1, y1, x2, y2 in regions], imgsz=self.config.tile_size,
+        results = self.model.predict([frame[y1:y2, x1:x2] for x1, y1, x2, y2 in regions], imgsz=self.imgsz,
                                      conf=self.conf, classes=self.classes, device=self.device, half=self.half, verbose=False)
         found = []
         for r, region in zip(results, regions):
@@ -239,7 +240,7 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
         stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
     else:
         person_model, classes = YOLO(settings.person_model), frozenset({person_class, COCO_PERSON})
-        persons = SlicedPersons(person_model, classes, device, settings.person_conf, slicing) if slicing and slicing.enabled             else TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
+        persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing) if slicing and slicing.enabled             else TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
         stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin)
     pose = YOLO(settings.pose_model) if settings.pose_model else None
     objects = YOLO(settings.object_model) if with_objects and settings.object_model else None

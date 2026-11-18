@@ -20,7 +20,8 @@ class Settings:
     # two_stage: persons with PERSON_MODEL, then EPP on each person's crop at full resolution; single: MODEL_PATH alone.
     detection_mode: str = "two_stage"
     person_model: str = "yolo11s.pt"
-    person_conf: float = 0.3
+    # Low on purpose: ByteTrack only starts tracks at >= 0.25; weaker detections just keep existing tracks alive.
+    person_conf: float = 0.2
     epp_imgsz: int = 640
     epp_crop_margin: float = 0.15
     pose_model: str = "yolo11n-pose.pt"

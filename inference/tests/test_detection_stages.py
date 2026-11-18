@@ -153,7 +153,7 @@ class _FakeTracker:
 def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
     model, tracker = _TilePersonModel(), _FakeTracker()
     config = SliceConfig(enabled=True, roi=(0.0, 0.0, 1.0, 0.3))          # 2000x300 px band: one row of tiles
-    persons = SlicedPersons(model, frozenset({"person"}), "cpu", 0.3, config, tracker).track(FRAME)
+    persons = SlicedPersons(model, frozenset({"person"}), "cpu", 640, 0.3, config, tracker).track(FRAME)
 
     shapes, kwargs = model.calls[0]
     assert shapes[0] == (1000, 2000) and all(s[0] == 300 for s in shapes[1:])   # one batch: whole frame + tiles

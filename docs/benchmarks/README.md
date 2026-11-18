@@ -89,6 +89,22 @@ SAHI con ROI `[0, 0.06, 1, 0.5]`: el fondo de la nave, sin la franja de la fecha
   - `PERSON_CONF` es 0,2: ByteTrack solo inicia un track desde 0,25, y las detecciones más débiles solo mantienen tracks existentes.
 - **EPP:** ninguna persona de estas grabaciones llega a 150 px de alto, así que el EPP casi no se reconoce (≤1 %). Con 960×480 esto es esperable; el paso 3 debe fijar `minPersonHeightPx` según la resolución real del main stream.
 
+## Paso 3: filtros y robustez (grabaciones de Camara 1)
+
+| Configuración (video A) | Personas por cuadro | Menores de 60 px | Detección + tracking (media / p95) | Cuadros/s |
+|---|---|---|---|---|
+| [5. SAHI 320 + CLAHE en la ROI](2026-11-17_2145_cam1-a-5-sahi-320-clahe_desktop-gl450ej.md) | **0,92** | 434 | 26,3 / 38,9 ms | 23,0 |
+| [6. SAHI 320 + gamma 0,7](2026-11-17_2146_cam1-a-6-sahi-320-gamma_desktop-gl450ej.md) | 0,78 | 298 | 23,9 / 34,9 ms | 24,5 |
+| [7. Paso 3 completo](2026-11-17_2150_cam1-a-7-paso3_desktop-gl450ej.md) | 0,93 | 436 | 28,4 / 39,7 ms | 21,6 |
+| [7. Paso 3 completo, video B](2026-11-17_2151_cam1-b-7-paso3_desktop-gl450ej.md) | 0,17 | 133 | 26,2 / 37,7 ms | 23,1 |
+
+El paso 3 completo combina: dos etapas, SAHI 320→640 en la ROI `[0, 0.06, 1, 0.5]`, CLAHE, EPP solo desde 150 px, buffer de 4 s y conteo 3 de 5.
+
+- **CLAHE** sube las personas detectadas en el fondo de A de 0,79 a 0,92 por cuadro, con menos de 60 px: 199 → 434. Gamma no aporta en esta escena. Falta revisar a ojo si CLAHE agrega falsos positivos; el conteo suavizado y el umbral de 0,25 de ByteTrack los limitan.
+- **La detección baja de ~34 a ~27 ms** respecto de la configuración 4: ya no se buscan EPP en personas de menos de 150 px, que en estas grabaciones son todas.
+- **EPP:** con `MIN_PERSON_HEIGHT_PX=90` ([8](2026-11-17_2153_cam1-a-8-paso3-epp90_desktop-gl450ej.md)) tampoco aparece EPP: el modelo `epp_v3_completo` no reconoce el EPP de estos trabajadores ni sobre recortes a resolución completa. Confirma el hallazgo 2; lo resuelve el reentrenamiento del paso 8.
+- **Resumen Camara 1, video A:** de 0,05 personas por cuadro (modelo anterior) a 0,93 (paso 3), con un costo de detección de 17 → 28 ms en la RTX 5070.
+
 ### Medida en producción (PC de la empresa, GTX 1650)
 
 Datos reportados desde la plataforma (heartbeat) el 16–17/11/2026:

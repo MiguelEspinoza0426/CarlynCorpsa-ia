@@ -10,6 +10,7 @@ from .drawing import draw_event, encode_jpeg
 from .live_stream import LiveStream, Overlay
 from .rules import RuleEngine
 from .settings import Settings
+from .slicing import SliceConfig
 from .sources import open_source, with_credentials
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,12 @@ class CameraWorker(threading.Thread):
         return overrides.get(self.camera.id) or overrides.get(self.camera.name) or with_credentials(self.camera.stream_url, self.camera.credentials_ref)
 
     @property
+    def slicing(self) -> SliceConfig:
+        overrides = self.settings.slice_overrides
+        override = overrides.get(self.camera.id) or overrides.get(self.camera.name)
+        return SliceConfig.parse(override) if override else self.camera.slicing
+
+    @property
     def status(self) -> str:
         if self.reader is None:
             return "Reconnecting"
@@ -66,7 +73,8 @@ class CameraWorker(threading.Thread):
 
     def run(self) -> None:
         try:
-            self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True)
+            self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
+                                            slicing=self.slicing)
             self.reader = open_source(self.source, self.camera.name)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat
             self.error = f"No se pudo iniciar: {ex}"

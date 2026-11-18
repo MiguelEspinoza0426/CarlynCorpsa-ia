@@ -38,6 +38,8 @@ class Settings:
     jpeg_quality: int = 75
     blur_stream: bool = True
     source_overrides: dict[str, str] = field(default_factory=dict)
+    # Camera id or name -> inference.slice block, to try SAHI before the API sends it.
+    slice_overrides: dict[str, dict] = field(default_factory=dict)
     # Lowest level sent to the API for the administrators' log page; OFF disables it.
     remote_log_level: str = "INFO"
 
@@ -84,5 +86,6 @@ class Settings:
             blur_stream=_bool("BLUR_STREAM", defaults.blur_stream),
             # JSON map camera id or name -> source ("0", video file, rtsp://...), for tests without the DVR.
             source_overrides=json.loads(env("SOURCE_OVERRIDES", "{}")),
+            slice_overrides=json.loads(env("SLICE_OVERRIDES", "{}")),
             remote_log_level=env("REMOTE_LOG_LEVEL", defaults.remote_log_level).strip().upper(),
         )

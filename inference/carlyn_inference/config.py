@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 
 from .geometry import Point
+from .slicing import SliceConfig
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ class CameraConfig:
     zones: list[Zone] = field(default_factory=list)
     # Pixelate faces in the live video (evidence images and snapshots are always pixelated).
     blur_faces: bool = True
+    # SAHI for distant persons (inference.slice); disabled when the API does not send it.
+    slicing: SliceConfig = SliceConfig()
 
     @property
     def source_key(self) -> tuple:
@@ -82,5 +85,6 @@ def parse(data: dict) -> NodeConfig:
         epp_classes=frozenset(data["model"]["eppClasses"]),
         person_class=data["model"]["personClass"],
         cameras=[CameraConfig(c["id"], c["name"], c["streamUrl"], c.get("credentialsRef"), c["targetFps"],
-                              [zone(z) for z in c.get("zones", [])], c.get("blurFaces", True)) for c in data["cameras"]],
+                              [zone(z) for z in c.get("zones", [])], c.get("blurFaces", True),
+                              SliceConfig.parse((c.get("inference") or {}).get("slice"))) for c in data["cameras"]],
     )

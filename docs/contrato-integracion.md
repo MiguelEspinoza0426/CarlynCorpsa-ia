@@ -37,6 +37,7 @@
       "id": "01a1...", "name": "Soldadura - Nave 1",
       "streamUrl": "rtsp://192.168.100.14:554/Streaming/Channels/102",
       "credentialsRef": "CAM_DVR1", "targetFps": 5, "blurFaces": true,
+      "inference": { "slice": { "enabled": true, "tileSize": 640, "overlap": 0.2, "roi": [0.0, 0.0, 1.0, 0.3] } },
       "zones": [
         {
           "id": "01a2...", "name": "Área de soldadura", "type": "Work",
@@ -69,6 +70,7 @@
   | `window:<título>[:x,y,ancho,alto]` | Ventana del escritorio del equipo de inferencia, p. ej. la vista en vivo de Hik-Connect o iVMS-4200. Basta con parte del título. La región, en píxeles del área interna de la ventana, recorta una cámara de la cuadrícula; sin región se usa la ventana completa | No |
 
   Si cambia `streamUrl` o `targetFps`, el nodo reabre la fuente sin reiniciarse.
+- `inference.slice` (opcional; si falta, SAHI está apagado): detección de personas lejanas por mosaicos. Además de la pasada al cuadro completo, el nodo analiza mosaicos de `tileSize` px con un solape `overlap` (0–0,5), solo dentro de `roi` = `[x1, y1, x2, y2]` normalizado. Ejemplo: la franja del fondo de la nave en Camara 1. Si cambia, el nodo reinicia esa cámara.
 - `blurFaces` (por defecto `true`): pixelar los rostros en el **video en vivo** de esa cámara. Lo cambia un administrador en el formulario de la cámara. Las evidencias de los eventos y el snapshot se pixelan siempre.
 - La API llama a `POST {Inference:BaseUrl}/config/reload` al guardar cambios. Aun así, el nodo debe consultar `config` periódicamente (cada ~30 s, con `If-None-Match`).
 

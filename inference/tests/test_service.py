@@ -68,6 +68,14 @@ def test_config_is_parsed():
     assert node.person_class == "persona" and "guantes" in node.epp_classes
     assert zone.required_epp == {"guantes"} and zone.rule("EppMissing").min_duration_sec == 3
     assert zone.threshold("MaxOccupancy").critical == 4
+    assert not node.cameras[0].slicing.enabled          # no inference block: SAHI off
+
+
+def test_camera_slicing_is_parsed():
+    data = json.loads(json.dumps(CONFIG))
+    data["cameras"][0]["inference"] = {"slice": {"enabled": True, "tileSize": 640, "overlap": 0.2, "roi": [0, 0, 1, 0.3]}}
+    slicing = config_module.parse(data).cameras[0].slicing
+    assert slicing.enabled and slicing.roi == (0.0, 0.0, 1.0, 0.3)
 
 
 def test_credentials_come_from_the_environment(monkeypatch):
@@ -188,6 +196,12 @@ def test_service_starts_restarts_and_stops_workers():
     moved["cameras"][0]["streamUrl"] = "rtsp://192.168.100.14:554/Streaming/Channels/202"
     service.apply(config_module.parse(moved))
     assert worker.stopped and service.workers["cam-1"] is not worker
+
+    restarted = service.workers["cam-1"]
+    sliced = json.loads(json.dumps(moved))
+    sliced["cameras"][0]["inference"] = {"slice": {"enabled": True, "roi": [0, 0, 1, 0.3]}}
+    service.apply(config_module.parse(sliced))
+    assert restarted.stopped and service.workers["cam-1"] is not restarted   # new models for the new slicing
 
     service.apply(config_module.parse({**CONFIG, "cameras": []}))
     assert service.workers == {}

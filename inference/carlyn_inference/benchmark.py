@@ -170,18 +170,20 @@ class _Timings:
 
 # ---------- offline mode ----------
 
-def read_frames(source: str, limit: int, resize: tuple[int, int] | None) -> list[np.ndarray]:
+def read_frames(source: str, limit: int, resize: tuple[int, int] | None, stride: int = 1) -> list[np.ndarray]:
     path = Path(source)
     if path.is_dir():
         files = sorted(f for f in path.rglob("*") if f.suffix.lower() in IMAGE_SUFFIXES)[:limit]
         frames = [cv2.imread(str(f)) for f in files]
     else:
-        cap, frames = cv2.VideoCapture(source), []
+        cap, frames, index = cv2.VideoCapture(source), [], 0
         while len(frames) < limit:
             ok, frame = cap.read()
             if not ok:
                 break
-            frames.append(frame)
+            if index % stride == 0:   # every stride-th frame: covers a long recording with few frames
+                frames.append(frame)
+            index += 1
         cap.release()
     frames = [f for f in frames if f is not None]
     if not frames:
@@ -195,7 +197,7 @@ def offline(args, settings: Settings) -> dict:
 
     timings = _Timings()
     timings.install()
-    frames = read_frames(args.source, args.frames, args.resize)
+    frames = read_frames(args.source, args.frames, args.resize, args.stride)
     slicing = SliceConfig.parse(json.loads(args.slice)) if args.slice else None
     detector = create_detector(settings, "persona", frozenset(args.epp_classes), with_objects=False, slicing=slicing)
     for frame in frames[:5]:            # warm-up: CUDA kernels and cuDNN autotuning
@@ -217,7 +219,8 @@ def offline(args, settings: Settings) -> dict:
     detect_mean = camera["detect_ms"]["mean"]
     if slicing and slicing.enabled:
         camera["slicing"] = {"tile_size": slicing.tile_size, "overlap": slicing.overlap, "roi": list(slicing.roi)}
-    return {"source": f"{args.source} ({len(frames)} cuadros)", "cameras": {Path(args.source).name: camera},
+    sampled = f", 1 de cada {args.stride}" if args.stride > 1 else ""
+    return {"source": f"{args.source} ({len(frames)} cuadros{sampled})", "cameras": {Path(args.source).name: camera},
             "totals": {"Capacidad de detección (sin pose ni video)": f"{1000 / detect_mean:.1f} cuadros/s en total",
                        "Cuadros/s con detección + pose + codificación": camera["achieved_fps"]}}
 
@@ -293,6 +296,7 @@ def main() -> None:
     off = sub.add_parser("offline", help="video o carpeta de imágenes")
     off.add_argument("--source", required=True)
     off.add_argument("--frames", type=int, default=300)
+    off.add_argument("--stride", type=int, default=1, help="tomar 1 de cada N cuadros del video")
     off.add_argument("--resize", type=lambda s: tuple(int(v) for v in s.lower().split("x")), help="p. ej. 1280x720")
     off.add_argument("--slice", help='SAHI como en la cámara, p. ej. {"enabled": true, "roi": [0, 0, 1, 0.3]}')
     off.add_argument("--epp-classes", nargs="*", default=["careta_soldar", "guantes", "calzado", "mandil", "traje", "protector_facial", "lentes"])

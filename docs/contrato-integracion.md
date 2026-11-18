@@ -39,8 +39,9 @@
       "streamUrl": "rtsp://192.168.100.14:554/Streaming/Channels/102",
       "credentialsRef": "CAM_DVR1", "targetFps": 5, "blurFaces": true,
       "inference": {
-        "slice": { "enabled": true, "tileSize": 640, "overlap": 0.2, "roi": [0.0, 0.0, 1.0, 0.3] },
-        "preprocess": { "mode": "clahe", "clipLimit": 2.0 }
+        "personConfidence": 0.2, "imgSize": null, "minPersonHeightPx": 120,
+        "slice": { "enabled": true, "tileSize": 320, "overlap": 0.2, "roi": [0.0, 0.06, 1.0, 0.5] },
+        "preprocess": { "mode": "clahe", "gamma": 1.5, "clipLimit": 2.0, "roi": null }
       },
       "zones": [
         {
@@ -75,8 +76,9 @@
   | `window:<título>[:x,y,ancho,alto]` | Ventana del escritorio del equipo de inferencia, p. ej. la vista en vivo de Hik-Connect o iVMS-4200. Basta con parte del título. La región, en píxeles del área interna de la ventana, recorta una cámara de la cuadrícula; sin región se usa la ventana completa | No |
 
   Si cambia `streamUrl` o `targetFps`, el nodo reabre la fuente sin reiniciarse.
-- `inference.slice` (opcional; si falta, SAHI está apagado): detección de personas lejanas por mosaicos. Además de la pasada al cuadro completo, el nodo analiza mosaicos de `tileSize` px con un solape `overlap` (0–0,5), solo dentro de `roi` = `[x1, y1, x2, y2]` normalizado. Ejemplo: la franja del fondo de la nave en Camara 1. Si cambia, el nodo reinicia esa cámara.
-- `inference.preprocess` (opcional; por defecto `none`): corrección de contraste antes de detectar, para contraluz o zonas oscuras. `mode` puede ser `clahe` (con `clipLimit`) o `gamma` (con `gamma` > 1 para aclarar). Se aplica dentro de `roi` si se indica; si no, en la ROI de SAHI o en todo el cuadro. Las evidencias y el video en vivo no se modifican.
+- `inference` lo edita un administrador por cámara (`PUT /api/cameras/{id}/inference`). Si cambia, el nodo reinicia esa cámara. `personConfidence`, `imgSize` y `minPersonHeightPx` en `null` usan los valores del nodo (`PERSON_CONF`, `IMGSZ`, `MIN_PERSON_HEIGHT_PX`).
+- `inference.slice` (si `enabled` es `false`, SAHI está apagado): detección de personas lejanas por mosaicos. Además de la pasada al cuadro completo, el nodo analiza mosaicos de `tileSize` px con un solape `overlap` (0–0,5), solo dentro de `roi` = `[x1, y1, x2, y2]` normalizado. Ejemplo: la franja del fondo de la nave en Camara 1, sin la fecha del DVR.
+- `inference.preprocess` (por defecto `none`): corrección de contraste antes de detectar, para contraluz o zonas oscuras. `mode` puede ser `clahe` (con `clipLimit`) o `gamma` (con `gamma` > 1 para aclarar). Se aplica dentro de `roi` si se indica; si no, en la ROI de SAHI o en todo el cuadro. Las evidencias y el video en vivo no se modifican.
 - `blurFaces` (por defecto `true`): pixelar los rostros en el **video en vivo** de esa cámara. Lo cambia un administrador en el formulario de la cámara. Las evidencias de los eventos y el snapshot se pixelan siempre.
 - La API llama a `POST {Inference:BaseUrl}/config/reload` al guardar cambios. Aun así, el nodo debe consultar `config` periódicamente (cada ~30 s, con `If-None-Match`).
 
@@ -131,6 +133,8 @@
 - Los elementos cuya zona no pertenece a la cámara se rechazan uno por uno.
 - Cada lote de ocupación emite `occupancyUpdated` (la muestra más reciente por zona).
 
+Los eventos de una regla con `requiresValidation` (por defecto, EPP faltante; siempre, posible accidente) se guardan como `PendingValidation`: entran en la bandeja de validación y, una vez confirmados o marcados como falsos positivos, en `GET /api/events/training-export`.
+
 ### 2.4 `POST /api/ingest/heartbeat` (cada ~15 s)
 ```json
 {
@@ -139,7 +143,7 @@
   "cameras": [ { "cameraId": "..", "status": "Online", "fps": 9.8, "latencyMs": 140, "lastFrameAt": "..", "error": null } ]
 }
 ```
-- `status` ∈ `Online`, `Reconnecting`, `Offline`; `NoSignal` cuando la API lo admita (paso 6). Una cámara **sin señal** es aquella cuyo DVR mantiene el stream pero envía una imagen negra, uniforme o con su logo durante `NO_SIGNAL_SEC` (5 s), o una imagen congelada durante 30 s. No se analiza; hasta el paso 6 se reporta `Offline` y el motivo va en `error` («Sin señal: …»).
+- `status` ∈ `Online`, `Reconnecting`, `Offline`, `NoSignal`. Una cámara **sin señal** es aquella cuyo DVR mantiene el stream pero envía una imagen negra, uniforme o con su logo durante `NO_SIGNAL_SEC` (5 s), o una imagen congelada durante 30 s. No se analiza, y el motivo va en `error` («Sin señal: …»). Cada cambio de estado se publica por SignalR (`cameraStatusChanged`).
 - El nodo descarta los datos pendientes de cámaras y zonas que ya no están en la configuración: no reintenta enviarlos.
 - La API usa **su propia hora** como hora del último heartbeat.
 - Sin heartbeat en `Ingest:HeartbeatTimeoutSeconds` (60 s), la cámara pasa a `Offline` y se emite `cameraStatusChanged`.

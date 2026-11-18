@@ -1,0 +1,62 @@
+{
+  "label": "linea-base-video-848",
+  "mode": "offline",
+  "date": "2026-11-17T21:00:07",
+  "notes": "RTX 5070 de desarrollo; video WhatsApp de la empresa 848x480 (109 cuadros), no es Camara 1 a resolución real",
+  "environment": {
+    "host": "DESKTOP-GL450EJ",
+    "os": "Windows-11",
+    "python": "3.12.10",
+    "torch": "2.11.0+cu128",
+    "ultralytics": "8.4.184",
+    "commit": "319aff8",
+    "gpu": "NVIDIA GeForce RTX 5070"
+  },
+  "config": {
+    "model": "epp_v3_completo",
+    "model_path": "../ml/runs/epp_v3_completo/weights/best.pt",
+    "imgsz": 640,
+    "conf": 0.25,
+    "pose_model": "yolo11n-pose.pt",
+    "device": "0"
+  },
+  "source": "../ml/datasets/empresa_raw/dataset_carlyn_empresa/images_empresa/WhatsApp Video 2026-10-21 at 11.19.34 AM (1).mp4 (109 cuadros)",
+  "cameras": {
+    "WhatsApp Video 2026-10-21 at 11.19.34 AM (1).mp4": {
+      "resolution": "848x480",
+      "detect_ms": {
+        "n": 109,
+        "mean": 25.2,
+        "p50": 23.6,
+        "p95": 38.2,
+        "max": 42.3
+      },
+      "pose_ms": {
+        "n": 109,
+        "mean": 23.7,
+        "p50": 17.1,
+        "p95": 34.6,
+        "max": 317.8
+      },
+      "frames": 109,
+      "persons_per_frame": 1.71,
+      "person_heights": {
+        "<60 px": 2,
+        "60–150 px": 120,
+        "≥150 px": 64
+      },
+      "encode_ms": {
+        "n": 109,
+        "mean": 1.1,
+        "p50": 1.1,
+        "p95": 1.3,
+        "max": 1.7
+      },
+      "achieved_fps": 20.0
+    }
+  },
+  "totals": {
+    "Capacidad de detección (sin pose ni video)": "39.7 cuadros/s en total",
+    "Cuadros/s con detección + pose + codificación": 20.0
+  }
+}

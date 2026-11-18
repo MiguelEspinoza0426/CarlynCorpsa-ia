@@ -75,6 +75,6 @@ def test_worker_reports_no_signal_instead_of_online(camera_factory):
     assert worker.status == "Online"
     worker.no_signal = "Sin señal: el DVR envía una imagen negra, uniforme o su logo"
     beat = worker.heartbeat()
-    assert beat["status"] == "Offline" and beat["error"].startswith("Sin señal")
+    assert beat["status"] == "NoSignal" and beat["error"].startswith("Sin señal")
     worker.reader.connected = False
     assert worker.status == "Reconnecting"            # a broken stream is still reported as such

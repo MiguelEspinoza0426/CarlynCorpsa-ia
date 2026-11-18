@@ -8,7 +8,6 @@ import numpy as np
 from .crops import belongs_to, crop_region, to_frame_box
 from .geometry import Box, center, contains, iou
 from .preprocess import Preprocessor
-from .preprocess import Preprocessor
 from .slicing import SliceConfig, cut_by_tile, merge, tile_regions
 from .rules import ObjectObs, PersonObs
 
@@ -266,6 +265,9 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
                     fps: float | None = None) -> Detector:
     """Loads the models of one camera according to the node settings (DETECTION_MODE) and its `inference` block."""
     from ultralytics import YOLO  # imported lazily so pure modules can be tested without torch
+
+    if inference is not None:
+        settings = inference.apply_to(settings)   # per-camera person confidence, image size and minimum height
 
     device = settings.torch_device
     slicing = inference.slicing if inference else None

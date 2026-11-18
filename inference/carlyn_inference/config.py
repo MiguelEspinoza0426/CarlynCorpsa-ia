@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 
 from .geometry import Point
 from .preprocess import PreprocessConfig
-from .preprocess import PreprocessConfig
 from .slicing import SliceConfig
 
 
@@ -45,23 +44,24 @@ class InferenceConfig:
     """Per-camera detection settings (`inference` block); everything off when the API does not send it."""
     slicing: SliceConfig = SliceConfig()
     preprocess: PreprocessConfig = PreprocessConfig()
+    # None: the node default (PERSON_CONF, IMGSZ, MIN_PERSON_HEIGHT_PX).
+    person_confidence: float | None = None
+    img_size: int | None = None
+    min_person_height_px: int | None = None
 
     @staticmethod
     def parse(data: dict | None) -> "InferenceConfig":
         data = data or {}
-        return InferenceConfig(SliceConfig.parse(data.get("slice")), PreprocessConfig.parse(data.get("preprocess")))
+        number = lambda key, kind: kind(data[key]) if data.get(key) is not None else None  # noqa: E731
+        return InferenceConfig(SliceConfig.parse(data.get("slice")), PreprocessConfig.parse(data.get("preprocess")),
+                               number("personConfidence", float), number("imgSize", int), number("minPersonHeightPx", int))
 
-
-@dataclass(frozen=True)
-class InferenceConfig:
-    """Per-camera detection settings (`inference` block); everything off when the API does not send it."""
-    slicing: SliceConfig = SliceConfig()
-    preprocess: PreprocessConfig = PreprocessConfig()
-
-    @staticmethod
-    def parse(data: dict | None) -> "InferenceConfig":
-        data = data or {}
-        return InferenceConfig(SliceConfig.parse(data.get("slice")), PreprocessConfig.parse(data.get("preprocess")))
+    def apply_to(self, settings):
+        """The node settings with this camera's thresholds on top."""
+        from dataclasses import replace
+        overrides = {k: v for k, v in (("person_conf", self.person_confidence), ("imgsz", self.img_size),
+                                       ("min_person_height_px", self.min_person_height_px)) if v is not None}
+        return replace(settings, **overrides) if overrides else settings
 
 
 @dataclass(frozen=True)

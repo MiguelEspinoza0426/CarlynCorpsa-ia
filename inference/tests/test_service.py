@@ -86,6 +86,16 @@ def test_camera_slicing_is_parsed():
     assert config_module.parse(data).cameras[0].inference.preprocess.mode == "none"
 
 
+def test_camera_thresholds_override_the_node_defaults():
+    data = json.loads(json.dumps(CONFIG))
+    data["cameras"][0]["inference"] = {"personConfidence": 0.15, "imgSize": 960, "minPersonHeightPx": None}
+    inference = config_module.parse(data).cameras[0].inference
+    node = Settings(person_conf=0.2, imgsz=640, min_person_height_px=150)
+    camera = inference.apply_to(node)
+    assert (camera.person_conf, camera.imgsz, camera.min_person_height_px) == (0.15, 960, 150)   # null keeps the node value
+    assert config_module.parse(CONFIG).cameras[0].inference.apply_to(node) is node
+
+
 def test_credentials_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("CAM_DVR1_USER", "visor")
     monkeypatch.setenv("CAM_DVR1_PASS", "cl@ve#1")

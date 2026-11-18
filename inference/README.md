@@ -91,7 +91,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `DECODE_HW` | Decodificación del video RTSP o de archivo: `auto` usa el decodificador de la GPU (NVDEC, por D3D11VA en Windows) si está disponible y si no la CPU; `off` fuerza la CPU | `auto` |
 | `MAX_BATCH` | Imágenes por llamada a la GPU (mosaicos SAHI, recortes de personas). No puede superar el batch con el que se exportaron los motores TensorRT | `8` |
 | `NO_SIGNAL_SEC` | Segundos de imagen negra, uniforme o con el logo del DVR antes de reportar la cámara sin señal (imagen congelada: 30 s). Mientras tanto no se analiza | `5` |
-| `NO_SIGNAL_STATUS` | Estado que se envía en el heartbeat para una cámara sin señal; el motivo va en `error`. Cambiará a `NoSignal` cuando la API lo admita | `Offline` |
+| `NO_SIGNAL_STATUS` | Estado que se envía en el heartbeat para una cámara sin señal; el motivo va en `error`. `Offline` solo para una API anterior al estado `NoSignal` | `NoSignal` |
 | `EPP_IMGSZ`, `EPP_CROP_MARGIN` | Tamaño de inferencia de los recortes de EPP y margen alrededor de cada persona | `640`, `0.15` |
 | `POSE_MODEL` | Modelo de postura (caídas y pixelado de rostros); vacío lo desactiva | `yolo11n-pose.pt` |
 | `OBJECT_MODEL` | Modelo COCO para condiciones inseguras; vacío lo desactiva | vacío |
@@ -99,7 +99,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `IMGSZ`, `CONF` | Resolución y confianza mínima de detección | `640`, `0.25` |
 | `PORT` | Puerto HTTP del servicio | `8100` |
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
-| `INFERENCE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "slice": {...}, "preprocess": {...} } }`: el bloque `inference` de una cámara, para probar SAHI y la corrección de contraste mientras la API no lo envíe | `{}` |
+| `INFERENCE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "slice": {...}, "preprocess": {...}, "personConfidence": 0.2 } }`: reemplaza el bloque `inference` que envía la API para esa cámara, para pruebas. En producción se configura en la plataforma (Parámetros → Cámaras) | `{}` |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
 | `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros en el video en vivo» de la plataforma; `false` lo desactiva en todas | `true` |
 | `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |

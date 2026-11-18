@@ -34,8 +34,8 @@ class Settings:
     decode_hw: str = "auto"
     # Images per GPU call (SAHI tiles, persons' crops); must not exceed the batch of exported TensorRT engines.
     max_batch: int = 8
-    # Heartbeat status for a camera without signal. "Offline" until the API knows "NoSignal" (step 6).
-    no_signal_status: str = "Offline"
+    # Heartbeat status for a camera without signal ("Offline" for an API older than the NoSignal status).
+    no_signal_status: str = "NoSignal"
     pose_model: str = "yolo11n-pose.pt"
     object_model: str = ""
     device: str = "auto"

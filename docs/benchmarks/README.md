@@ -105,6 +105,19 @@ El paso 3 completo combina: dos etapas, SAHI 320→640 en la ROI `[0, 0.06, 1, 0
 - **EPP:** con `MIN_PERSON_HEIGHT_PX=90` ([8](2026-11-17_2153_cam1-a-8-paso3-epp90_desktop-gl450ej.md)) tampoco aparece EPP: el modelo `epp_v3_completo` no reconoce el EPP de estos trabajadores ni sobre recortes a resolución completa. Confirma el hallazgo 2; lo resuelve el reentrenamiento del paso 8.
 - **Resumen Camara 1, video A:** de 0,05 personas por cuadro (modelo anterior) a 0,93 (paso 3), con un costo de detección de 17 → 28 ms en la RTX 5070.
 
+## Paso 5: TensorRT, NVDEC y reparto de la GPU
+
+Mismo video A, con la configuración completa del paso 3, en la RTX 5070:
+
+| Modelos | Detección + tracking (media / p95) | Pose (media) | Cuadros/s del pipeline | Personas por cuadro |
+|---|---|---|---|---|
+| [PyTorch `.pt`](2026-11-17_2214_cam1-a-9-pt_desktop-gl450ej.md) | 29,1 / 40,3 ms | 16,9 ms | 21,2 | 0,93 |
+| [TensorRT FP16 `.engine`](2026-11-17_2215_cam1-a-10-tensorrt_desktop-gl450ej.md) | **20,8 / 30,6 ms** | **7,8 ms** | **33,6** | 0,93 |
+
+- **TensorRT** baja la detección un 29 % y la pose un 54 %, y el pipeline completo procesa un 58 % más de cuadros, con las mismas detecciones. Los motores se generan con `python -m carlyn_inference.export` en la PC donde van a correr: un motor de la RTX 5070 no sirve en la GTX 1650.
+- **NVDEC (`DECODE_HW=auto`):** con estas grabaciones de 960×480 no hay diferencia (0,6 ms por cuadro en CPU o GPU). La ganancia aparece al decodificar el main stream de 1080p o más en H.264/H.265: libera la CPU de la PC de la empresa.
+- **Reparto de la GPU:** con la GPU saturada, cada cámara recibe turnos en proporción a su `targetFps`. Con 20/2/2 FPS, Camara 1 obtiene ~83 % y cada una de las otras ~8 %; antes, con el candado global, el reparto dependía de quién pedía la GPU más seguido.
+
 ### Medida en producción (PC de la empresa, GTX 1650)
 
 Datos reportados desde la plataforma (heartbeat) el 16–17/11/2026:

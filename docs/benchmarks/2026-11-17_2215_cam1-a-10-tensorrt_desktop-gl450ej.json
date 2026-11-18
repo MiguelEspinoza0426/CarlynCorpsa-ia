@@ -1,0 +1,80 @@
+{
+  "label": "cam1-a-10-tensorrt",
+  "mode": "offline",
+  "date": "2026-11-17T22:15:32",
+  "notes": "RTX 5070; grabación de Camara 1, 1200 cuadros seguidos; paso 3 completo (dos etapas + SAHI 320→640 + CLAHE); motores TensorRT FP16 (batch dinámico 8)",
+  "environment": {
+    "host": "DESKTOP-GL450EJ",
+    "os": "Windows-11",
+    "python": "3.12.10",
+    "torch": "2.11.0+cu128",
+    "ultralytics": "8.4.184",
+    "commit": "f10b095",
+    "gpu": "NVIDIA GeForce RTX 5070"
+  },
+  "config": {
+    "model": "epp_v3_completo",
+    "model_path": "../ml/runs/epp_v3_completo/weights/best_fp16_640_b8.engine",
+    "imgsz": 640,
+    "conf": 0.25,
+    "pose_model": "yolo11n-pose_fp16_640_b8.engine",
+    "device": "0",
+    "detection_mode": "two_stage",
+    "person_model": "../yolo11s_fp16_640_b8.engine",
+    "person_conf": 0.2,
+    "epp_imgsz": 640,
+    "epp_crop_margin": 0.15
+  },
+  "source": "../videos/WhatsApp Video 2026-11-17 at 5.51.36 PM.mp4 (1200 cuadros)",
+  "cameras": {
+    "WhatsApp Video 2026-11-17 at 5.51.36 PM.mp4": {
+      "resolution": "960x480",
+      "detect_ms": {
+        "n": 1200,
+        "mean": 20.8,
+        "p50": 20.4,
+        "p95": 30.6,
+        "max": 43.7
+      },
+      "pose_ms": {
+        "n": 1211,
+        "mean": 7.8,
+        "p50": 8.3,
+        "p95": 10.8,
+        "max": 782.3
+      },
+      "frames": 1200,
+      "persons_per_frame": 0.93,
+      "person_heights": {
+        "<60 px": 432,
+        "60–150 px": 680,
+        "≥150 px": 0
+      },
+      "persons_with_epp": "0%",
+      "epp_by_class": {},
+      "encode_ms": {
+        "n": 1200,
+        "mean": 1.2,
+        "p50": 1.2,
+        "p95": 1.4,
+        "max": 1.8
+      },
+      "achieved_fps": 33.6,
+      "slicing": {
+        "tile_size": 320,
+        "overlap": 0.2,
+        "roi": [
+          0.0,
+          0.06,
+          1.0,
+          0.5
+        ]
+      },
+      "preprocess": "clahe"
+    }
+  },
+  "totals": {
+    "Capacidad de detección (sin pose ni video)": "48.1 cuadros/s en total",
+    "Cuadros/s con detección + pose + codificación": 33.6
+  }
+}

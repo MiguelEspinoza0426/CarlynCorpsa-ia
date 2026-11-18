@@ -101,6 +101,8 @@ class Outbox:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._backoff = 0.0
+        # camera id -> zone ids of the current configuration; None until the first one arrives (no filtering).
+        self._active: dict[str, frozenset[str]] | None = None
         self._thread = threading.Thread(target=self._run, daemon=True, name="outbox")
         self.sent_events = 0
 
@@ -112,30 +114,53 @@ class Outbox:
         self._thread.join(timeout=5)
         self.flush()
 
+    def set_active(self, zones_by_camera: dict[str, frozenset[str]]) -> None:
+        """New configuration: queued data of removed cameras or zones is dropped (the API would reject it forever)."""
+        with self._lock:
+            self._active = dict(zones_by_camera)
+            before = self._pending_unlocked()
+            self._events = deque(e for e in self._events if self._is_active(e.payload))
+            for kind, queue in self._metrics.items():
+                self._metrics[kind] = deque(item for item in queue if self._is_active(item))
+            dropped = before - self._pending_unlocked()
+        if dropped:
+            log.info("Dropped %d queued items of removed cameras or zones", dropped)
+
+    def _is_active(self, item: dict) -> bool:
+        if self._active is None:
+            return True
+        zones = self._active.get(item["cameraId"])
+        return zones is not None and (item.get("zoneId") is None or item["zoneId"] in zones)
+
     def add_event(self, payload: dict, snapshot: bytes | None) -> None:
         with self._lock:
+            if not self._is_active(payload):
+                return
             self._events.append(_PendingEvent(payload, snapshot))
             while len(self._events) > MAX_QUEUE:
                 log.warning("Outbox full, dropping event %s", self._events.popleft().payload["clientEventId"])
 
     def add_metrics(self, camera_id: str, occupancy: list[OccupancySample], dwell: list[DwellSession], inactivity: list[InactivityInterval]) -> None:
         with self._lock:
-            self._metrics["occupancy"].extend({
+            self._metrics["occupancy"].extend(m for m in ({
                 "cameraId": camera_id, "zoneId": o.zone_id, "windowStart": iso(o.window_start), "windowSec": o.window_sec,
-                "avgCount": o.avg_count, "maxCount": o.max_count, "minCount": o.min_count} for o in occupancy)
-            self._metrics["dwell"].extend({
+                "avgCount": o.avg_count, "maxCount": o.max_count, "minCount": o.min_count} for o in occupancy) if self._is_active(m))
+            self._metrics["dwell"].extend(m for m in ({
                 "cameraId": camera_id, "zoneId": d.zone_id, "trackId": d.track_id, "enteredAt": iso(d.entered_at),
-                "exitedAt": iso(d.exited_at), "fromZoneId": d.from_zone_id} for d in dwell)
-            self._metrics["inactivity"].extend({
+                "exitedAt": iso(d.exited_at), "fromZoneId": d.from_zone_id} for d in dwell) if self._is_active(m))
+            self._metrics["inactivity"].extend(m for m in ({
                 "cameraId": camera_id, "zoneId": i.zone_id, "trackId": i.track_id, "startedAt": iso(i.started_at),
-                "endedAt": iso(i.ended_at)} for i in inactivity)
+                "endedAt": iso(i.ended_at)} for i in inactivity) if self._is_active(m))
             for queue in self._metrics.values():
                 while len(queue) > MAX_QUEUE:
                     queue.popleft()
 
     def pending(self) -> int:
         with self._lock:
-            return len(self._events) + sum(len(q) for q in self._metrics.values())
+            return self._pending_unlocked()
+
+    def _pending_unlocked(self) -> int:
+        return len(self._events) + sum(len(q) for q in self._metrics.values())
 
     def _run(self) -> None:
         while not self._stop.wait(self.flush_interval + self._backoff):

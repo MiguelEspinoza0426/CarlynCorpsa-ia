@@ -121,6 +121,22 @@ def test_outbox_sends_events_then_evidence_and_metrics():
     assert outbox.pending() == 0
 
 
+def test_outbox_drops_data_of_removed_cameras_and_zones():
+    api = FakeApi()
+    outbox = Outbox(api.client())
+    sample = OccupancySample("z-old", 0.0, 10, 1.0, 1, 1)
+    outbox.add_metrics("cam-gone", [sample], [], [])
+    outbox.add_metrics("cam-1", [sample, OccupancySample("z-1", 0.0, 10, 1.0, 1, 1)], [], [])
+    assert outbox.pending() == 3
+
+    outbox.set_active({"cam-1": frozenset({"z-1"})})            # Patio deleted; z-old removed from cam-1
+    assert outbox.pending() == 1
+    outbox.add_metrics("cam-gone", [sample], [], [])            # a worker still stopping: ignored
+    outbox.flush()
+    sent = [body for method, path, body in api.calls if path == "/api/ingest/metrics/occupancy"]
+    assert [s["zoneId"] for s in sent[0]["samples"]] == ["z-1"]
+
+
 def test_outbox_keeps_events_when_the_api_is_down():
     fake = FakeApi(fail_events=1)
     outbox = Outbox(fake.client())

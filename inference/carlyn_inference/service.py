@@ -72,6 +72,7 @@ class InferenceService:
         with self._lock:
             self.config = node
             wanted = {c.id: c for c in node.cameras}
+            self.outbox.set_active({c.id: frozenset(z.id for z in c.zones) for c in node.cameras})
             for camera_id in list(self.workers):
                 if camera_id not in wanted:
                     log.info("Stopping camera %s (removed or disabled)", self.workers[camera_id].camera.name)

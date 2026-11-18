@@ -24,6 +24,8 @@ class Settings:
     person_conf: float = 0.2
     epp_imgsz: int = 640
     epp_crop_margin: float = 0.15
+    # Persons shorter than this (source pixels) are counted and tracked, but their EPP is not judged.
+    min_person_height_px: int = 150
     pose_model: str = "yolo11n-pose.pt"
     object_model: str = ""
     device: str = "auto"
@@ -71,6 +73,7 @@ class Settings:
             person_conf=float(env("PERSON_CONF", defaults.person_conf)),
             epp_imgsz=int(env("EPP_IMGSZ", defaults.epp_imgsz)),
             epp_crop_margin=float(env("EPP_CROP_MARGIN", defaults.epp_crop_margin)),
+            min_person_height_px=int(env("MIN_PERSON_HEIGHT_PX", defaults.min_person_height_px)),
             pose_model=env("POSE_MODEL", defaults.pose_model),
             object_model=env("OBJECT_MODEL", defaults.object_model),
             device=env("DEVICE", defaults.device),

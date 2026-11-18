@@ -142,17 +142,19 @@ class TwoStage:
     """
 
     def __init__(self, persons: TrackedPersons | SlicedPersons, epp_model, epp_classes: frozenset[str], device,
-                 epp_imgsz: int, epp_conf: float, margin: float):
+                 epp_imgsz: int, epp_conf: float, margin: float, min_height_px: int = 0):
         self.persons, self.epp_model = persons, epp_model
         self.epp_classes, self.device = epp_classes, device
         self.epp_imgsz, self.epp_conf, self.margin = epp_imgsz, epp_conf, margin
+        self.min_height_px = min_height_px
 
     def run(self, frame: np.ndarray) -> tuple[list[RawPerson], dict[int, set[str]], list[EppBox]]:
         persons = self.persons.track(frame)
         epp: dict[int, set[str]] = {track_id: set() for track_id, _, _ in persons}
         h, w = frame.shape[:2]
+        # Persons too small to judge their EPP are not cropped (the Detector marks them as not evaluated).
         crops = [(track_id, box, region) for track_id, box, _ in persons
-                 if (region := crop_region(box, w, h, self.margin)) is not None]
+                 if box[3] * h >= self.min_height_px and (region := crop_region(box, w, h, self.margin)) is not None]
         if not crops:
             return persons, epp, []
         # A single batch for all the persons of the frame.
@@ -177,17 +179,22 @@ class TwoStage:
 class Detector:
     """One instance per camera: Ultralytics trackers keep state per model instance."""
 
-    def __init__(self, stage: SingleStage | TwoStage, pose_model=None, object_model=None, device=None, imgsz: int = 640):
+    def __init__(self, stage: SingleStage | TwoStage, pose_model=None, object_model=None, device=None, imgsz: int = 640,
+                 min_person_height_px: int = 0):
         self.stage, self.pose, self.objects = stage, pose_model, object_model
         self.device, self.imgsz = device, imgsz
+        self.min_person_height_px = min_person_height_px
 
     def detect(self, frame: np.ndarray, detect_objects: bool) -> Detections:
         h, w = frame.shape[:2]
         raw_persons, epp, epp_boxes = self.stage.run(frame)
         lying = [p for p in raw_persons if p[1][2] * w > FALL_ASPECT * p[1][3] * h]
         keypoints = self._pose(frame) if lying and self.pose else []
-        persons = [PersonObs(t, box, round(conf, 3), frozenset(epp[t]), self._is_fallen(box, keypoints, w, h) if (t, box, conf) in lying else False)
-                   for t, box, conf in raw_persons]
+        persons = []
+        for t, box, conf in raw_persons:
+            evaluated = box[3] * h >= self.min_person_height_px
+            persons.append(PersonObs(t, box, round(conf, 3), frozenset(epp[t]) if evaluated else frozenset(),
+                                     self._is_fallen(box, keypoints, w, h) if (t, box, conf) in lying else False, evaluated))
         objects = self._objects(frame) if detect_objects and self.objects else []
         return Detections(persons, objects, epp_boxes, keypoints)
 
@@ -240,11 +247,15 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
         stage = SingleStage(epp_model, person_class, epp_classes, device, settings.imgsz, settings.conf)
     else:
         person_model, classes = YOLO(settings.person_model), frozenset({person_class, COCO_PERSON})
-        persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing) if slicing and slicing.enabled             else TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
-        stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin)
+        if slicing and slicing.enabled:
+            persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing)
+        else:
+            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf)
+        stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin,
+                         settings.min_person_height_px)
     pose = YOLO(settings.pose_model) if settings.pose_model else None
     objects = YOLO(settings.object_model) if with_objects and settings.object_model else None
-    return Detector(stage, pose, objects, device, settings.imgsz)
+    return Detector(stage, pose, objects, device, settings.imgsz, settings.min_person_height_px)
 
 
 PIXELATION_BLOCKS = 6       # a face region is reduced to about 6x6 blocks: not recognizable

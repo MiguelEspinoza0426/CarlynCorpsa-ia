@@ -32,6 +32,13 @@ def run(rule_obj, state, z, track, seconds, step=0.5, **kw):
     return events
 
 
+def test_epp_rule_ignores_persons_whose_epp_was_not_judged(camera_factory):
+    z = zone("z", "Work", required=("guantes",), rules=(rule("EppMissing", min_duration=1, min_conf=0.1),))
+    small = PersonObs(1, BOX, 0.9, frozenset(), epp_evaluated=False)
+    assert run(EppMissingRule(), EngineState(camera_factory(z)), z, inside("z"), 5, p=small) == []
+    assert run(EppMissingRule(), EngineState(camera_factory(z)), z, inside("z"), 5, p=person()) != []   # same person, judged: fires
+
+
 def test_rules_table_is_keyed_by_event_type():
     table = default_rules()
     assert set(table) == set(EventType)

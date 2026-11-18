@@ -112,6 +112,15 @@ def test_single_stage_keeps_the_previous_behaviour():
     assert [b[0] for b in boxes] == ["casco"]
 
 
+def test_small_persons_are_tracked_but_their_epp_is_not_judged():
+    # 100x300 px person and a 150 px minimum: evaluated. A 400 px minimum: tracked, not cropped, EPP not judged.
+    stage, _, epp = _two_stage([(0, 0.8, 1000, 500, 1100, 800)], [7], [[(1, 0.6, 30, 150, 110, 250)]])
+    stage.min_height_px = 400
+    person = Detector(stage, min_person_height_px=400).detect(FRAME, detect_objects=False).persons[0]
+    assert epp.crops == []
+    assert (person.track_id, person.epp, person.epp_evaluated) == (7, frozenset(), False)
+
+
 def test_detector_builds_person_observations_from_any_stage():
     stage, _, _ = _two_stage([(0, 0.81234, 1000, 500, 1100, 800)], [7], [[(1, 0.6, 30, 150, 110, 250)]])
     detections = Detector(stage).detect(FRAME, detect_objects=False)

@@ -18,7 +18,8 @@ class EppMissingRule(PersonZoneRule):
                  count: int, now: float) -> list[EventOut]:
         presence = track.zones.get(zone.id)
         rule = zone.rule(self.event_type)
-        if presence is None or rule is None or not zone.required_epp or person.confidence < rule.min_confidence:
+        if presence is None or rule is None or not zone.required_epp or person.confidence < rule.min_confidence \
+                or not person.epp_evaluated:
             return []
         window = max(rule.min_duration_sec, 1)
         presence.epp.append((now, zone.required_epp - person.epp))

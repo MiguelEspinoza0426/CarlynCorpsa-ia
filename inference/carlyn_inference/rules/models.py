@@ -27,6 +27,8 @@ class PersonObs:
     confidence: float
     epp: frozenset[str] = frozenset()
     fallen: bool = False
+    # False when the person is too small for EPP to be judged: EPP rules skip that frame.
+    epp_evaluated: bool = True
 
 
 @dataclass(frozen=True)

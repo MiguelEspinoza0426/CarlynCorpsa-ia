@@ -17,7 +17,8 @@ class OccupancyExceededRule(ZoneRule):
         zone_state.over_since = zone_state.over_since or now
         if now - zone_state.over_since >= rule.min_duration_sec and state.cooldown_ok(rule, "zone", now):
             inside = [p for p in persons if zone.id in state.tracks[p.track_id].zones]
-            confidence = sum(p.confidence for p in inside) / len(inside)
+            # The smoothed count may hold for a frame where nobody inside was detected.
+            confidence = sum(p.confidence for p in inside) / len(inside) if inside else 0.0
             return [EventOut(rule.type, zone.id, rule.id, zone_state.over_since, now, round(confidence, 3), count, None, None,
                              {"count": count, "threshold": limit})]
         return []

@@ -9,6 +9,7 @@ from ..geometry import foot_point, point_in_polygon
 from .base import FrameRule, PersonRule, PersonZoneRule, RuleStrategy, ZoneRule
 from .models import DwellSession, EventOut, EventType, InactivityInterval, ObjectObs, OccupancySample, PersonObs
 from .registry import default_rules
+from .smoothing import CountSmoother
 from .state import TRACK_LOST_SEC, EngineState, Presence, Track, inactivity_limit
 
 OCCUPANCY_WINDOW_SEC = 10
@@ -21,6 +22,8 @@ class RuleEngine:
         self.camera = camera
         # Same patience as the tracker: closing earlier would split one person's dwell in two.
         self.track_lost_sec = track_lost_sec
+        self._smoother = CountSmoother()
+        self._counts: dict[str, int] = {z.id: 0 for z in camera.zones}
         self._state = EngineState(camera)
         table = list((rules if rules is not None else default_rules()).values())
         self._person_zone_rules = [r for r in table if isinstance(r, PersonZoneRule)]
@@ -44,7 +47,9 @@ class RuleEngine:
                 self._exit(p.track_id, track, zone_id, now)
             for zone_id in inside - set(track.zones):
                 track.zones[zone_id] = Presence(entered_at=now, from_zone_id=track.last_exited_zone)
-        counts = {z.id: sum(1 for p in persons if z.id in state.tracks[p.track_id].zones) for z in zones}
+        raw = {z.id: sum(1 for p in persons if z.id in state.tracks[p.track_id].zones) for z in zones}
+        # Rules, occupancy metrics and the live overlay all use the smoothed count (3 of the last 5 frames).
+        counts = self._counts = {zone_id: self._smoother.update(zone_id, n) for zone_id, n in raw.items()}
 
         # 2. Per-person rules.
         for p in persons:
@@ -81,7 +86,7 @@ class RuleEngine:
         return out
 
     def zone_counts(self) -> dict[str, int]:
-        return {z.id: sum(1 for t in self._state.tracks.values() if z.id in t.zones) for z in self.camera.zones}
+        return dict(self._counts)
 
     # ---- metrics ----
 

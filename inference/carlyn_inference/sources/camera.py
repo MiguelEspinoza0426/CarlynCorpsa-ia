@@ -17,13 +17,26 @@ import cv2  # noqa: E402
 
 log = logging.getLogger(__name__)
 
+# DECODE_HW -> OpenCV/FFmpeg acceleration. On Windows "auto" uses D3D11VA, which runs on the GPU's video decoder
+# (NVDEC on NVIDIA): decoding a 1080p H.264/H.265 main stream no longer takes CPU from the rest of the node.
+HW_MODES = {"off": None, "auto": "VIDEO_ACCELERATION_ANY", "d3d11": "VIDEO_ACCELERATION_D3D11",
+            "vaapi": "VIDEO_ACCELERATION_VAAPI", "mfx": "VIDEO_ACCELERATION_MFX"}
+
+
+def capture_params(mode: str) -> list[int]:
+    """VideoCapture parameters for a DECODE_HW mode; [] (software decoding) for "off" or an unknown mode."""
+    name = HW_MODES.get(mode.lower())
+    return [cv2.CAP_PROP_HW_ACCELERATION, getattr(cv2, name)] if name and hasattr(cv2, name) else []
+
 
 class CameraReader:
     """Reads a webcam index, RTSP/HTTP URL or video file, keeping only the latest frame."""
 
-    def __init__(self, source, name: str = ""):
+    def __init__(self, source, name: str = "", hw_decode: str = "off"):
         self.source = source
         self.name = name or str(source)
+        self.hw_decode = hw_decode
+        self.hw_active = False
         self.frame = None
         self.ts = 0.0
         self.connected = False
@@ -36,6 +49,14 @@ class CameraReader:
 
     def _open(self):
         if isinstance(self.source, str):
+            params = capture_params(self.hw_decode)
+            if params:
+                cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG, params)
+                self.hw_active = cap.isOpened() and cap.get(cv2.CAP_PROP_HW_ACCELERATION) > 0
+                if cap.isOpened():
+                    return cap
+                log.warning("[%s] hardware decoding not available, using the CPU", self.name)
+            self.hw_active = False
             return cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
         return cv2.VideoCapture(self.source, cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY)
 
@@ -49,7 +70,7 @@ class CameraReader:
                 time.sleep(wait)
                 wait = min(wait * 2, 30)
                 continue
-            log.info("[%s] connected", self.name)
+            log.info("[%s] connected%s", self.name, " (hardware decoding)" if self.hw_active else "")
             self.connected, self.error, wait = True, None, 1
             # Video files are played at their own frame rate and looped.
             frame_interval = 1 / (cap.get(cv2.CAP_PROP_FPS) or 25) if self._is_file else 0

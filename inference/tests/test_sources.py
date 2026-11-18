@@ -9,8 +9,8 @@ from test_service import make_service
 
 
 class FakeReader:
-    def __init__(self, source, name=""):
-        self.source, self.name = source, name
+    def __init__(self, source, name="", hw_decode="off"):
+        self.source, self.name, self.hw_decode = source, name, hw_decode
 
 
 def opened(monkeypatch, source):
@@ -27,6 +27,16 @@ def test_webcam_sources_open_the_device_index(monkeypatch):
 def test_rtsp_and_files_are_opened_as_urls(monkeypatch):
     assert opened(monkeypatch, "rtsp://dvr/Streaming/Channels/102").source == "rtsp://dvr/Streaming/Channels/102"
     assert opened(monkeypatch, "C:/videos/nave.mp4").source == "C:/videos/nave.mp4"
+
+
+def test_hardware_decoding_parameters():
+    import cv2
+
+    from carlyn_inference.sources.camera import capture_params
+    assert capture_params("off") == []
+    assert capture_params("auto") == [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY]
+    assert capture_params("D3D11") == [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_D3D11]
+    assert capture_params("nvdec-typo") == []
 
 
 def test_window_sources_keep_title_and_region(monkeypatch):

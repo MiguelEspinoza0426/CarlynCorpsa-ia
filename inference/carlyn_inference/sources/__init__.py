@@ -33,7 +33,7 @@ def with_credentials(url: str, credentials_ref: str | None) -> str:
     return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
-def open_source(source: str, name: str = ""):
+def open_source(source: str, name: str = "", hw_decode: str = "off"):
     """Opens the reader for a source: webcam index, desktop window, or URL/file."""
     if source.startswith(WINDOW_PREFIX):
         from .window import WindowReader
@@ -41,4 +41,4 @@ def open_source(source: str, name: str = ""):
     webcam = WEBCAM.fullmatch(source)
     if webcam or source.isdigit():
         return CameraReader(int(webcam.group(1) if webcam else source), name)
-    return CameraReader(source, name)
+    return CameraReader(source, name, hw_decode)

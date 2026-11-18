@@ -84,7 +84,7 @@ class CameraWorker(threading.Thread):
             self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
                                             inference=self.inference, fps=self.camera.target_fps)
             self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
-            self.reader = open_source(self.source, self.camera.name)
+            self.reader = open_source(self.source, self.camera.name, self.settings.decode_hw)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat
             self.error = f"No se pudo iniciar: {ex}"
             log.exception("Camera %s could not start", self.camera.name)

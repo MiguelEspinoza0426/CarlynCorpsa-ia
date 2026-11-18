@@ -170,6 +170,9 @@ class Outbox:
             except httpx.HTTPError as ex:
                 self._backoff = min(60.0, max(1.0, self._backoff * 2))
                 log.warning("API not reachable (%s); retrying in %.0fs with %d items pending", ex, self._backoff, self.pending())
+            except Exception:  # noqa: BLE001 - a bug must not stop the sender thread silently
+                self._backoff = min(60.0, max(1.0, self._backoff * 2))
+                log.exception("Unexpected error sending data; retrying in %.0fs with %d items pending", self._backoff, self.pending())
 
     def flush(self) -> None:
         self._flush_events()

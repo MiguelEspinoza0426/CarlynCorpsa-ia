@@ -130,7 +130,9 @@ class SlicedPersons:
         boxes, scores = merge(xyxy, conf, self.config.iou, self.config.min_box_px, cut)
         data = np.column_stack([boxes, scores, np.zeros(len(scores))]).astype(np.float32) if len(scores) else np.empty((0, 6), np.float32)
         tracks = self.tracker.update(Boxes(data, (h, w)), frame)
-        return [(int(t[4]), (t[0] / w, t[1] / h, (t[2] - t[0]) / w, (t[3] - t[1]) / h), float(t[5])) for t in tracks]
+        # Plain floats: these boxes end up in the JSON of events (numpy float32 is not serializable).
+        return [(int(t[4]), (float(t[0] / w), float(t[1] / h), float((t[2] - t[0]) / w), float((t[3] - t[1]) / h)), float(t[5]))
+                for t in tracks]
 
 
 class TrackedPersons(SlicedPersons):

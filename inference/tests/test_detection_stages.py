@@ -177,7 +177,8 @@ class _FakeTracker:
 
     def update(self, boxes, img):
         self.seen = boxes
-        return np.array([[*xyxy, i + 1, conf, 0, i] for i, (xyxy, conf) in enumerate(zip(boxes.xyxy.tolist(), boxes.conf.tolist()))])
+        return np.array([[*xyxy, i + 1, conf, 0, i] for i, (xyxy, conf) in enumerate(zip(boxes.xyxy.tolist(), boxes.conf.tolist()))],
+                        dtype=np.float32)   # like Ultralytics: float32
 
 
 def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
@@ -190,6 +191,7 @@ def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
     assert kwargs["half"] is False and kwargs["classes"] == [0]
     assert len(persons) == 2
     distant = min(persons, key=lambda p: p[1][3])
+    assert all(type(v) is float for _, box, conf in persons for v in (*box, conf))   # JSON-serializable
     assert distant[1] == pytest.approx((100 / 2000, 50 / 1000, 40 / 2000, 120 / 1000))
 
 

@@ -23,6 +23,15 @@ def _px(box: Box, w: int, h: int) -> tuple[int, int, int, int]:
     return int(x * w), int(y * h), int((x + bw) * w), int((y + bh) * h)
 
 
+# A zone covering this share of the image or more is not tinted nor outlined: it would only tint the whole video.
+FULL_FRAME_ZONE = 0.9
+
+
+def zone_area(polygon) -> float:
+    """Area of a normalized polygon (shoelace formula), as a share of the image."""
+    return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]))) / 2
+
+
 def draw(frame: np.ndarray, camera: CameraConfig, persons: list[PersonObs], counts: dict[str, int], fps: float) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -30,8 +39,9 @@ def draw(frame: np.ndarray, camera: CameraConfig, persons: list[PersonObs], coun
     for zone in camera.zones:
         pts = np.array([[int(x * w), int(y * h)] for x, y in zone.polygon], np.int32)
         color = ZONE_COLORS.get(zone.type, (200, 200, 200))
-        cv2.fillPoly(overlay, [pts], color)
-        cv2.polylines(out, [pts], True, color, 2)
+        if zone_area(list(zone.polygon)) < FULL_FRAME_ZONE:
+            cv2.fillPoly(overlay, [pts], color)
+            cv2.polylines(out, [pts], True, color, 2)
         label = f"{zone.name}: {counts.get(zone.id, 0)}"
         cv2.putText(out, label, (pts[:, 0].min() + 4, pts[:, 1].min() + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     out = cv2.addWeighted(overlay, 0.12, out, 0.88, 0)

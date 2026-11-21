@@ -51,6 +51,11 @@ class CameraWorker(threading.Thread):
         return overrides.get(self.camera.id) or overrides.get(self.camera.name) or with_credentials(self.camera.stream_url, self.camera.credentials_ref)
 
     @property
+    def view_only(self) -> bool:
+        """Plain live video: the camera is not analyzed (VIEW_ONLY_CAMERAS)."""
+        return bool({self.camera.id, self.camera.name} & self.settings.view_only_cameras)
+
+    @property
     def inference(self) -> InferenceConfig:
         overrides = self.settings.inference_overrides
         override = overrides.get(self.camera.id) or overrides.get(self.camera.name)
@@ -87,9 +92,10 @@ class CameraWorker(threading.Thread):
 
     def run(self) -> None:
         try:
-            self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
-                                            inference=self.inference, fps=self.camera.target_fps)
-            self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
+            if not self.view_only:
+                self.detector = create_detector(self.settings, self.node.person_class, self.node.epp_classes, with_objects=True,
+                                                inference=self.inference, fps=self.camera.target_fps)
+                self.detector.set_epp_min_confidence(self.node.epp_min_confidence)
             self.reader = open_source(self.source, self.camera.name, self.settings.decode_hw)
         except Exception as ex:  # noqa: BLE001 - reported through the heartbeat
             self.error = f"No se pudo iniciar: {ex}"
@@ -109,6 +115,10 @@ class CameraWorker(threading.Thread):
             if self.no_signal:
                 # Nothing to analyze: the GPU is left to the other cameras.
                 time.sleep(max(0.0, 1 / self.camera.target_fps - (time.time() - started)))
+                continue
+            if self.view_only:
+                self._show_only(frame, ts)
+                time.sleep(max(0.0, 1 / self.settings.stream_fps - (time.time() - started)))
                 continue
             try:
                 self._process(frame, ts)
@@ -153,6 +163,16 @@ class CameraWorker(threading.Thread):
         self.last_frame_at = now
         with self.frame_ready:
             self.latest_frame, self.latest_persons = frame, detections.persons
+            self.frame_ready.notify_all()
+
+    def _show_only(self, frame, ts: float) -> None:
+        """View-only camera: keeps the live video and the zone editor image current, without any GPU work."""
+        now = time.time()
+        self.stream.overlay = Overlay(self.camera, [], [], {}, 0.0, analyzed=False)
+        self.latency_ms = int((now - ts) * 1000)
+        self.last_frame_at = now
+        with self.frame_ready:
+            self.latest_frame, self.latest_persons = frame, []
             self.frame_ready.notify_all()
 
     def _read_frame(self):

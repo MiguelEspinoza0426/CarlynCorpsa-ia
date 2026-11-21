@@ -195,6 +195,12 @@ def test_sliced_persons_adds_distant_people_from_the_roi_tiles():
     assert distant[1] == pytest.approx((100 / 2000, 50 / 1000, 40 / 2000, 120 / 1000))
 
 
+def test_half_precision_can_be_turned_off_on_gpu():
+    model = _TilePersonModel()
+    SlicedPersons(model, frozenset({"person"}), 0, 640, 0.3, SliceConfig(), _FakeTracker(), half=False).track(FRAME)
+    assert model.calls[0][1]["half"] is False
+
+
 def test_predictions_are_split_in_batches_the_engine_accepts():
     from carlyn_inference.detection import predict_batched
 

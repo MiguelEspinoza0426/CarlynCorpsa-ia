@@ -34,6 +34,8 @@ class Settings:
     decode_hw: str = "auto"
     # Images per GPU call (SAHI tiles, persons' crops); must not exceed the batch of exported TensorRT engines.
     max_batch: int = 8
+    # Half precision for the person detector on GPU. Turn it off on a GTX 16xx: there FP16 batches return no persons.
+    half: bool = True
     # Heartbeat status for a camera without signal ("Offline" for an API older than the NoSignal status).
     no_signal_status: str = "NoSignal"
     pose_model: str = "yolo11n-pose.pt"
@@ -53,6 +55,8 @@ class Settings:
     source_overrides: dict[str, str] = field(default_factory=dict)
     # Camera id or name -> `inference` block (slice, preprocess), to try them before the API sends them.
     inference_overrides: dict[str, dict] = field(default_factory=dict)
+    # Camera ids or names shown as plain live video: no detection, rules, alerts or metrics (no GPU).
+    view_only_cameras: frozenset[str] = frozenset()
     # Lowest level sent to the API for the administrators' log page; OFF disables it.
     remote_log_level: str = "INFO"
 
@@ -103,8 +107,10 @@ class Settings:
             stream_fps=int(env("STREAM_FPS", defaults.stream_fps)),
             jpeg_quality=int(env("JPEG_QUALITY", defaults.jpeg_quality)),
             blur_stream=_bool("BLUR_STREAM", defaults.blur_stream),
+            half=_bool("HALF", defaults.half),
             # JSON map camera id or name -> source ("0", video file, rtsp://...), for tests without the DVR.
             source_overrides=json.loads(env("SOURCE_OVERRIDES", "{}")),
             inference_overrides=json.loads(env("INFERENCE_OVERRIDES", "{}")),
+            view_only_cameras=frozenset(n.strip() for n in env("VIEW_ONLY_CAMERAS", "").split(",") if n.strip()),
             remote_log_level=env("REMOTE_LOG_LEVEL", defaults.remote_log_level).strip().upper(),
         )

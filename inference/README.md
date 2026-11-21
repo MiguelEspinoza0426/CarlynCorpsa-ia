@@ -90,6 +90,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `TRACK_BUFFER_SEC` | Segundos que una persona que deja de verse (columna, camión, contraluz) conserva su ID de seguimiento. También es el tiempo tras el cual el motor de reglas cierra su permanencia | `4` |
 | `DECODE_HW` | Decodificación del video RTSP o de archivo: `auto` usa el decodificador de la GPU (NVDEC, por D3D11VA en Windows) si está disponible y si no la CPU; `off` fuerza la CPU | `auto` |
 | `MAX_BATCH` | Imágenes por llamada a la GPU (mosaicos SAHI, recortes de personas). No puede superar el batch con el que se exportaron los motores TensorRT | `8` |
+| `HALF` | Media precisión (FP16) en el detector de personas. Pon `false` en una GTX serie 16 (p. ej. GTX 1650): allí los lotes de 2 o más imágenes en FP16, como los mosaicos SAHI, no detectan a nadie | `true` |
 | `NO_SIGNAL_SEC` | Segundos de imagen negra, uniforme o con el logo del DVR antes de reportar la cámara sin señal (imagen congelada: 30 s). Mientras tanto no se analiza | `5` |
 | `NO_SIGNAL_STATUS` | Estado que se envía en el heartbeat para una cámara sin señal; el motivo va en `error`. `Offline` solo para una API anterior al estado `NoSignal` | `NoSignal` |
 | `EPP_IMGSZ`, `EPP_CROP_MARGIN` | Tamaño de inferencia de los recortes de EPP y margen alrededor de cada persona | `640`, `0.15` |
@@ -102,6 +103,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `INFERENCE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "slice": {...}, "preprocess": {...}, "personConfidence": 0.2 } }`: reemplaza el bloque `inference` que envía la API para esa cámara, para pruebas. En producción se configura en la plataforma (Parámetros → Cámaras) | `{}` |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
 | `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros» de la plataforma; `false` lo desactiva en todas (las evidencias siguen la opción de cada cámara) | `true` |
+| `VIEW_ONLY_CAMERAS` | Nombres o ids de cámaras separados por coma que solo muestran el video en vivo: sin análisis, reglas, alertas ni métricas, y sin usar la GPU. Si la cámara tiene «Pixelar rostros», no muestra video (sin análisis no se sabe dónde están las caras) | vacío |
 | `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |
 | `REMOTE_LOG_LEVEL` | Nivel mínimo de los logs que se envían a la API para la página **Logs del sistema** (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `OFF` lo desactiva | `INFO` |
 

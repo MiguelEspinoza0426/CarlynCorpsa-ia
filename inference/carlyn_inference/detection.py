@@ -103,13 +103,14 @@ class SlicedPersons:
     """
 
     def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, config: SliceConfig, tracker=None,
-                 max_batch: int = 8):
+                 max_batch: int = 8, half: bool = True):
         # Every region is inferred at imgsz: tiles smaller than imgsz are enlarged (320 px tiles at 640 = 2x zoom).
         self.model, self.device, self.imgsz, self.conf, self.config = model, device, imgsz, conf, config
         self.max_batch = max_batch
         # Only the person class goes through NMS and the tracker (COCO "person" or our "persona").
         self.classes = [i for i, name in model.names.items() if name in person_classes]
-        self.half = device != "cpu"
+        # Half precision (GPU only) can be turned off: on a GTX 1650 it finds nobody in batches of 2 or more images.
+        self.half = half and device != "cpu"
         self.tracker = tracker or byte_tracker()
 
     def track(self, frame: np.ndarray) -> list[RawPerson]:
@@ -137,8 +138,9 @@ class SlicedPersons:
 class TrackedPersons(SlicedPersons):
     """First stage without SAHI: only the whole frame, reduced to imgsz."""
 
-    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, tracker=None, max_batch: int = 8):
-        super().__init__(model, person_classes, device, imgsz, conf, SliceConfig(), tracker, max_batch)
+    def __init__(self, model, person_classes: frozenset[str], device, imgsz: int, conf: float, tracker=None, max_batch: int = 8,
+                 half: bool = True):
+        super().__init__(model, person_classes, device, imgsz, conf, SliceConfig(), tracker, max_batch, half)
 
 
 def byte_tracker(buffer_frames: int | None = None):
@@ -280,9 +282,10 @@ def create_detector(settings, person_class: str, epp_classes: frozenset[str], wi
         tracker = byte_tracker(round(settings.track_buffer_sec * fps) if fps else None)
         if slicing and slicing.enabled:
             persons = SlicedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, slicing, tracker,
-                                    settings.max_batch)
+                                    settings.max_batch, settings.half)
         else:
-            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, tracker, settings.max_batch)
+            persons = TrackedPersons(person_model, classes, device, settings.imgsz, settings.person_conf, tracker, settings.max_batch,
+                                     settings.half)
         stage = TwoStage(persons, epp_model, epp_classes, device, settings.epp_imgsz, settings.conf, settings.epp_crop_margin,
                          settings.min_person_height_px, settings.max_batch)
     pose = YOLO(settings.pose_model) if settings.pose_model else None

@@ -93,3 +93,23 @@ def test_overlay_does_not_claim_missing_epp_for_persons_too_small_to_judge(camer
     near = PersonObs(2, (0.4, 0.2, 0.2, 0.6), 0.9, frozenset())
     assert missing_epp(camera, far) == []
     assert missing_epp(camera, near) == ["mandil"]
+
+
+def test_a_view_only_camera_shows_the_raw_video_without_detections(camera_factory):
+    camera = replace(camera_factory(zone("z", "Work")), blur_faces=False)
+    stream = LiveStream(Source().read, fps=30, jpeg_quality=70, max_width=320, blur=True)
+    try:
+        stream.overlay = Overlay(camera, [], [], {}, 0.0, analyzed=False)
+        assert stream.render(noise()) is not None
+    finally:
+        stream.close()
+
+
+def test_a_view_only_camera_that_asks_for_pixelation_shows_no_video(camera_factory):
+    camera = replace(camera_factory(zone("z", "Work")), blur_faces=True)
+    stream = LiveStream(Source().read, fps=30, jpeg_quality=70, max_width=320, blur=True)
+    try:
+        stream.overlay = Overlay(camera, [], [], {}, 0.0, analyzed=False)
+        assert stream.render(noise()) is None       # no face positions without analysis: nothing is shown
+    finally:
+        stream.close()

@@ -10,6 +10,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+import cv2
 import numpy as np
 
 from .config import CameraConfig
@@ -33,6 +34,8 @@ class Overlay:
     counts: dict[str, int]
     fps: float
     at: float = field(default_factory=time.time)
+    # False for a view-only camera: the raw video is shown, without detections.
+    analyzed: bool = True
 
 
 class LiveStream:
@@ -70,6 +73,14 @@ class LiveStream:
         overlay = self.overlay
         if overlay is None or (now or time.time()) - overlay.at > MAX_OVERLAY_AGE_SEC:
             return None
+        if not overlay.analyzed:
+            # Without analysis there are no face positions: a camera that asks for pixelation shows no video.
+            if self._blur and overlay.camera.blur_faces:
+                return None
+            out = frame.copy()
+            cv2.putText(out, f"{overlay.camera.name}  (solo video)", (8, out.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 255, 255), 2)
+            return encode_jpeg(out, self._jpeg_quality, self._max_width)
         out = draw(frame, overlay.camera, overlay.persons, overlay.counts, overlay.fps)
         if self._blur and overlay.camera.blur_faces:
             out = blur_faces(out, overlay.persons, overlay.pose_keypoints, padding=BLUR_PADDING)

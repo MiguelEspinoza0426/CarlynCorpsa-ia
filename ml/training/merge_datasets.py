@@ -48,6 +48,10 @@ MAPEO = {
     "face_shield": "protector_facial",
     "goggles": "lentes", "safety_glasses": "lentes", "glasses": "lentes",
     # "respirator" se descarta: solo hay 1 ejemplo en todos los datasets
+     # Dataset propio de la empresa (Roboflow: CarlynCorpsa-EPP-Detection)
+    "calzado_de_seguridad": "calzado", "careta_de_soldar": "careta_soldar", "chaqueta_de_soldar": "traje",
+    # Capturas de las cámaras etiquetadas con los nombres unificados (capturar_cuadros.py)
+    **{clase: clase for clase in CLASES},
 }
 
 # Solo con --persona
@@ -221,7 +225,8 @@ def main():
         (SALIDA / split / "labels").mkdir(parents=True)
 
     carpetas = [c for c in sorted(DATASETS.iterdir())
-                if c.is_dir() and c.name not in EXCLUIDOS and (c / "data.yaml").is_file()]
+                if c.is_dir() and c.name not in EXCLUIDOS and not c.name.startswith("captura_")   # sin revisar
+                and (c / "data.yaml").is_file()]
     remaps = {c: leer_dataset(c) for c in carpetas}
 
     conteo = {s: Counter() for s in ("train", "valid", "test")}

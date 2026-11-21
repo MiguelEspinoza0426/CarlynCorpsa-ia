@@ -5,7 +5,7 @@ Servicio Python que analiza las cámaras con YOLO y envía eventos y métricas a
 ```
 Cámaras / DVR ──RTSP──► CameraReader ──► Detector (YOLO + ByteTrack + postura) ──► RuleEngine (zonas y reglas)
                                                                                       │
-API .NET ◄── eventos + evidencias (rostros pixelados), métricas, heartbeat ◄── Outbox (reintentos)
+API .NET ◄── eventos + evidencias, métricas, heartbeat ◄── Outbox (reintentos)
 API .NET ──► /cameras/{id}/snapshot.jpg, /cameras/{id}/stream.mjpeg, /config/reload
 ```
 
@@ -29,7 +29,7 @@ API .NET ──► /cameras/{id}/snapshot.jpg, /cameras/{id}/stream.mjpeg, /conf
 
 Los IDs de track son temporales: **no hay reconocimiento facial ni identidades**.
 
-**Privacidad:** los rostros se **pixelan** en evidencias, snapshots y el video en vivo. En el video en vivo, que muestra fotogramas más recientes que el último análisis, la zona pixelada se amplía, y si el análisis se detiene más de 1 s el video se congela en lugar de mostrar rostros sin pixelar. Se usan los puntos de la cara del modelo de postura y, si no hay, la parte superior de la caja de la persona.
+**Privacidad:** los rostros se **pixelan** en el video en vivo y en las evidencias de las alertas de cada cámara que tenga activa la opción «Pixelar rostros» (activa por defecto), y siempre en el snapshot del editor de zonas. Las evidencias ya enviadas no cambian: el pixelado queda grabado en la imagen. En el video en vivo, que muestra fotogramas más recientes que el último análisis, la zona pixelada se amplía, y si el análisis se detiene más de 1 s el video se congela en lugar de mostrar rostros sin pixelar. Se usan los puntos de la cara del modelo de postura y, si no hay, la parte superior de la caja de la persona.
 
 ## Motor de reglas (`carlyn_inference/rules/`)
 
@@ -101,7 +101,7 @@ C:\venvs\carlyn\Scripts\pip install -r requirements-dev.txt
 | `<REF>_USER`, `<REF>_PASS` | Credenciales de las cámaras con `credentialsRef = REF` (p. ej. `CAM_DVR1_USER`) | — |
 | `INFERENCE_OVERRIDES` | JSON `{ "nombre o id de cámara": { "slice": {...}, "preprocess": {...}, "personConfidence": 0.2 } }`: reemplaza el bloque `inference` que envía la API para esa cámara, para pruebas. En producción se configura en la plataforma (Parámetros → Cámaras) | `{}` |
 | `SOURCE_OVERRIDES` | JSON `{ "nombre o id de cámara": "fuente" }` para pruebas sin el DVR (video, `0` = webcam) | `{}` |
-| `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros en el video en vivo» de la plataforma; `false` lo desactiva en todas | `true` |
+| `BLUR_STREAM` | Interruptor general del pixelado de rostros en el video en vivo. Con `true`, cada cámara decide con su opción «Pixelar rostros» de la plataforma; `false` lo desactiva en todas (las evidencias siguen la opción de cada cámara) | `true` |
 | `STREAM_FPS` | Fotogramas por segundo del video en vivo. Es independiente del análisis, que va a los «FPS objetivo» de cada cámara; el límite real lo pone la cámara | `30` |
 | `REMOTE_LOG_LEVEL` | Nivel mínimo de los logs que se envían a la API para la página **Logs del sistema** (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `OFF` lo desactiva | `INFO` |
 

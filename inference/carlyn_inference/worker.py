@@ -9,12 +9,18 @@ from .detection import Detector, blur_faces, create_detector
 from .drawing import draw_event, encode_jpeg
 from .gpu import GPU
 from .live_stream import LiveStream, Overlay
-from .rules import RuleEngine
+from .rules import EventOut, PersonObs, RuleEngine
 from .settings import Settings
 from .sources import open_source, with_credentials
 from .sources.signal import SignalMonitor
 
 log = logging.getLogger(__name__)
+
+
+def evidence_image(frame, event: EventOut, persons: list[PersonObs], keypoints, blur: bool):
+    """Evidence of an alert: the event box drawn over the frame, with faces pixelated when the camera asks for it."""
+    image = draw_event(frame, event)
+    return blur_faces(image, persons, keypoints) if blur else image
 
 
 
@@ -128,10 +134,12 @@ class CameraWorker(threading.Thread):
         events = engine.update(now, detections.persons, detections.objects)
 
         if events:
-            with GPU.turn(self.camera.id, self.camera.target_fps):
-                keypoints = self.detector.face_keypoints(frame)
+            keypoints = []
+            if camera.blur_faces:   # without pixelation the face keypoints are not needed: no GPU spent on them
+                with GPU.turn(self.camera.id, self.camera.target_fps):
+                    keypoints = self.detector.face_keypoints(frame)
             for event in events:
-                snapshot = blur_faces(draw_event(frame, event), detections.persons, keypoints)
+                snapshot = evidence_image(frame, event, detections.persons, keypoints, camera.blur_faces)
                 self.outbox.add_event(event_payload(camera.id, event, self.settings.model_version),
                                       encode_jpeg(snapshot, 85, max_width=1280))
                 log.info("[%s] %s in zone %s (track %s)", camera.name, event.type, event.zone_id, event.track_id)

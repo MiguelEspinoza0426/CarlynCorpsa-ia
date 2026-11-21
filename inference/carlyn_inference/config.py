@@ -72,7 +72,7 @@ class CameraConfig:
     credentials_ref: str | None
     target_fps: int
     zones: list[Zone] = field(default_factory=list)
-    # Pixelate faces in the live video (evidence images and snapshots are always pixelated).
+    # Pixelate faces in the live video and in alert evidence (the zone editor image is always pixelated).
     blur_faces: bool = True
     # SAHI and contrast correction; changing them restarts the camera's worker (new models).
     inference: InferenceConfig = InferenceConfig()

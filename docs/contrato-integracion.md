@@ -79,7 +79,7 @@
 - `inference` lo edita un administrador por cámara (`PUT /api/cameras/{id}/inference`). Si cambia, el nodo reinicia esa cámara. `personConfidence`, `imgSize` y `minPersonHeightPx` en `null` usan los valores del nodo (`PERSON_CONF`, `IMGSZ`, `MIN_PERSON_HEIGHT_PX`).
 - `inference.slice` (si `enabled` es `false`, SAHI está apagado): detección de personas lejanas por mosaicos. Además de la pasada al cuadro completo, el nodo analiza mosaicos de `tileSize` px con un solape `overlap` (0–0,5), solo dentro de `roi` = `[x1, y1, x2, y2]` normalizado. Ejemplo: la franja del fondo de la nave en Camara 1, sin la fecha del DVR.
 - `inference.preprocess` (por defecto `none`): corrección de contraste antes de detectar, para contraluz o zonas oscuras. `mode` puede ser `clahe` (con `clipLimit`) o `gamma` (con `gamma` > 1 para aclarar). Se aplica dentro de `roi` si se indica; si no, en la ROI de SAHI o en todo el cuadro. Las evidencias y el video en vivo no se modifican.
-- `blurFaces` (por defecto `true`): pixelar los rostros en el **video en vivo** de esa cámara. Lo cambia un administrador en el formulario de la cámara. Las evidencias de los eventos y el snapshot se pixelan siempre.
+- `blurFaces` (por defecto `true`): pixelar los rostros en el **video en vivo** y en las **evidencias de los eventos** de esa cámara. Lo cambia un administrador en el formulario de la cámara. El snapshot del editor de zonas se pixela siempre.
 - La API llama a `POST {Inference:BaseUrl}/config/reload` al guardar cambios. Aun así, el nodo debe consultar `config` periódicamente (cada ~30 s, con `If-None-Match`).
 
 ### 2.2 `POST /api/ingest/events`
